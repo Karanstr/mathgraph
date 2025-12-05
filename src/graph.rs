@@ -29,10 +29,7 @@ impl Node {
 }
 
 pub struct Graph { 
-  pub alloc: Pond<()>,
-  pub neighbors: Vec<Vec<usize>>,
-  pub values: Vec<u8>,
-  pub positions: Vec<IVec2>
+  pub nodes: Pond<Node>,
 }
 // Boring management stuff
 impl Graph {
