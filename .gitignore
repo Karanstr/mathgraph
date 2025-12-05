@@ -1,0 +1,10 @@
+# Rust specific stuff
+/target
+Cargo.lock
+
+# Stupid cross compilation
+/fake_libs
+
+# Devenv metadata used for rust environment
+devenv.lock
+.devenv*
