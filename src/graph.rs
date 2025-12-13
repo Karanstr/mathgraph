@@ -39,6 +39,8 @@ impl Graph {
     self.nodes.insert(Node::new(position))
   }
 
+  pub fn node_count(&self) -> usize { self.nodes.iter().count() }
+
   pub fn add_connection(&mut self, node1: usize, node2: usize) -> bool {
     if self.nodes.is_occupied(node1) && self.nodes.is_occupied(node2) {
       self.nodes.get_mut(node1).unwrap().add_neighbor(node2);

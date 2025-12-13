@@ -8,15 +8,13 @@ use num2words::Num2Words;
 mod edit_functions;
 use edit_functions::*;
 
-use crate::state::{Classification, StateData, State};
-fn combine<'a>(a: &'a [State], b: &'a [State]) -> Vec<State> {
+use crate::state::{Classification, StateData, PackedState};
+fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
   let mut out = Vec::with_capacity(a.len() + b.len());
   out.extend_from_slice(a);
   out.extend_from_slice(b);
   out
 }
-
-
 
 struct Nodes {
   hovering: Option<usize>,
@@ -53,7 +51,7 @@ async fn main() {
 
   let mut ui_data = UiData::new();
 
-  let mut state_data = StateData::new();
+  let mut state_data = None;
 
   let mut graph = Graph::new();
   let mut nodes = Nodes { hovering: None, selected: None};
@@ -78,8 +76,7 @@ async fn main() {
           "Analyze",      // 5
         ], &mut ui_data.edit_mode);
         if ui_data.edit_mode == 0 || ui_data.edit_mode == 1 {
-          state_data.clear();
-
+          state_data = None;
           // parsed_analysis.clear();
           current_view_str = "1".to_string();
         }
@@ -92,57 +89,63 @@ async fn main() {
           // Compute new state data
           let mut just_pressed = false;
           if ui.button(Vec2::new(5., 110.), "GO") {
-            state_data.initialize(&mut graph, max);
+            state_data = StateData::new(&mut graph, max + 1);
             just_pressed = true;
           }
+          if let Some(state_space) = &mut state_data {
 
-          let total = ((max + 1) as u32).pow(graph.nodes.len() as u32);
-          ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
+            let total = (state_space.base as usize).pow(state_space.length as u32);
+            ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
 
-          let old_viewing = viewing;
-          ui.combo_box(hash!(), "Mode", &[
-            "All Invalid",    // 0
-            "Bad States",     // 1
-            "NotBad States",  // 2
-            "All Valid",      // 3
-          ], &mut viewing);
-          let focused_states = match viewing {
-            0 => &combine(
-              state_data.get_list(Classification::InvalidOther), 
-              state_data.get_list(Classification::InvalidT1)
-            ),
-            1 => state_data.get_list(Classification::InvalidT1),
-            2 => state_data.get_list(Classification::InvalidOther),
-            3 => state_data.get_list(Classification::Valid),
-            _ => unreachable!()
-          };
-          if old_viewing != viewing || just_pressed {
-            if !focused_states.is_empty() {
-              let current_viewed = current_view_str.parse::<usize>().unwrap_or_default();
-              if let Some(state) = focused_states.get(current_viewed.saturating_sub(1)) {
-                for idx in 0 .. graph.nodes.len() {
-                  graph.nodes.get_mut(idx).unwrap().value = state[idx];
+            let old_viewing = viewing;
+            ui.combo_box(hash!(), "Mode", &[
+              "All Invalid",    // 0
+              "Bad States",     // 1
+              "NotBad States",  // 2
+              "All Valid",      // 3
+            ], &mut viewing);
+            let focused_states = match viewing {
+              0 => &combine(
+                state_space.get_list(Classification::InvalidOther), 
+                state_space.get_list(Classification::InvalidT1)
+              ),
+              1 => state_space.get_list(Classification::InvalidT1),
+              2 => state_space.get_list(Classification::InvalidOther),
+              3 => state_space.get_list(Classification::Valid),
+              _ => unreachable!()
+            };
+            // Load first view
+            if old_viewing != viewing || just_pressed {
+              if !focused_states.is_empty() {
+                let current_viewed = current_view_str.parse::<usize>().unwrap_or_default();
+                if let Some(state) = focused_states.get(current_viewed.saturating_sub(1)) {
+                  let new_state = state_space.parse_state(*state);
+                  for idx in 0 .. graph.nodes.len() {
+                    graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
+                  }
                 }
               }
+              // let analysis = frequency_analysis(focused_states, max);
+              // parsed_analysis = parse_analysis(analysis, max, graph.nodes.len() as u8);
             }
-            // let analysis = frequency_analysis(focused_states, max);
-            // parsed_analysis = parse_analysis(analysis, max, graph.nodes.len() as u8);
+
+            ui.input_text(
+              hash!(),
+              &format!("/{} Viewed States", focused_states.len()),
+              &mut current_view_str
+            );
+
+            // Load current viewing state
+            if let Ok(idx) = current_view_str.parse::<usize>()
+            && let Some(state) = focused_states.get(idx.saturating_sub(1)) {
+              let new_state = state_space.parse_state(*state);
+              for idx in 0 .. graph.nodes.len() {
+                graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
+              }
+            }
           }
           
 
-          ui.input_text(
-            hash!(),
-            &format!("/{} Viewed States", focused_states.len()),
-            &mut current_view_str
-          );
-
-          // Load current viewing state
-          if let Ok(idx) = current_view_str.parse::<usize>()
-          && let Some(state) = focused_states.get(idx.saturating_sub(1)) {
-            for idx in 0 .. graph.nodes.len() {
-              graph.nodes.get_mut(idx).unwrap().value = state[idx];
-            }           
-          }
 
           // Analysis Window
           // widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
