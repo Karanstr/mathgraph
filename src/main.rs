@@ -1,5 +1,4 @@
-mod graph;
-use ahash::AHashSet;
+mod graph; mod state;
 use macroquad::prelude::*;
 use graph::Graph;
 use macroquad::ui::*;
@@ -9,38 +8,67 @@ use num2words::Num2Words;
 mod edit_functions;
 use edit_functions::*;
 
+use crate::state::{Classification, StateData, State};
+fn combine<'a>(a: &'a [State], b: &'a [State]) -> Vec<State> {
+  let mut out = Vec::with_capacity(a.len() + b.len());
+  out.extend_from_slice(a);
+  out.extend_from_slice(b);
+  out
+}
+
+
+
 struct Nodes {
   hovering: Option<usize>,
   selected: Option<usize> 
 }
 
+// Implement all UI based functions in this ui struct
+struct UiData {
+  radius_str: String,
+  radius: f32,
+  edit_mode: usize,
+  modify_str: String,
+  max_str: String,
+}
+impl UiData {
+  pub fn new() -> Self {
+    Self {
+      radius_str: "40.0".to_string(),
+      radius: 40.,
+      edit_mode: 0,
+      modify_str: "1".to_string(),
+      max_str: "2".to_string(),
+    }
+  }
+
+  pub fn parse_radius(&mut self) {
+    if let Ok(radius) = self.radius_str.parse::<f32>() { self.radius = radius };
+  }
+
+}
+
 #[macroquad::main("Graph Visualizer")]
 async fn main() {
-  let mut radius_str = "40.0".to_string();
-  let mut radius = 40.;
+
+  let mut ui_data = UiData::new();
+
+  let mut state_data = StateData::new();
+
   let mut graph = Graph::new();
   let mut nodes = Nodes { hovering: None, selected: None};
 
-  let mut edit_mode = 0;
-  let mut modify_val = "1".to_string();
-  let mut max_str = "2".to_string();
-
-  let mut state_table = AHashSet::new();
-  let mut state_list = Vec::new();
-  let mut invalid_states = Vec::new();
   let mut current_view_str = "1".to_string();
-  let mut theorem_1_states = Vec::new();
-  let mut not_t1_states = Vec::new();
   let mut viewing = 0;
-  let mut parsed_analysis = Vec::new();
+  // let mut parsed_analysis = Vec::new();
 
   loop {
     // Controls Window
     widgets::Window::new(hash!(), vec2(0., 0.), vec2(250., 150.))
       .label("Settings")
       .ui(&mut *root_ui(), |ui| {
-        ui.input_text(hash!(), "Radius", &mut radius_str);
-        ui.input_text(hash!(), "Max", &mut max_str);
+        ui.input_text(hash!(), "Radius", &mut ui_data.radius_str);
+        ui.input_text(hash!(), "Max", &mut ui_data.max_str);
         ui.combo_box(hash!(), "Mode", &[
           "Add/Connect", // 0
           "Remove",      // 1
@@ -48,30 +76,23 @@ async fn main() {
           "Modify",      // 3
           "Set",         // 4
           "Analyze",      // 5
-        ], &mut edit_mode);
-        if edit_mode == 0 || edit_mode == 1 {
-          state_table.clear();
-          state_list.clear();
-          invalid_states.clear();
-          theorem_1_states.clear();
-          not_t1_states.clear();
-          parsed_analysis.clear();
+        ], &mut ui_data.edit_mode);
+        if ui_data.edit_mode == 0 || ui_data.edit_mode == 1 {
+          state_data.clear();
+
+          // parsed_analysis.clear();
           current_view_str = "1".to_string();
         }
-        if edit_mode == 3 { ui.input_text(hash!(), "Delta", &mut modify_val); }
-        if edit_mode == 4 { ui.input_text(hash!(), "Value", &mut modify_val); }
-        if edit_mode == 5 {
+        if ui_data.edit_mode == 3 { ui.input_text(hash!(), "Delta", &mut ui_data.modify_str); }
+        if ui_data.edit_mode == 4 { ui.input_text(hash!(), "Value", &mut ui_data.modify_str); }
+        if ui_data.edit_mode == 5 {
 
-          let max = max_str.parse::<u8>().unwrap_or_default();
+          let max = ui_data.max_str.parse::<u8>().unwrap_or_default();
 
           // Compute new state data
           let mut just_pressed = false;
           if ui.button(Vec2::new(5., 110.), "GO") {
-            state_table = graph.all_possible_states(max);
-            state_list = state_table.clone().into_iter().collect();
-            state_list.sort();
-            invalid_states = find_invalid(&state_table, max);
-            (theorem_1_states, not_t1_states) = find_theorem_1(&graph, &invalid_states, max);
+            state_data.initialize(&mut graph, max);
             just_pressed = true;
           }
 
@@ -86,11 +107,14 @@ async fn main() {
             "All Valid",      // 3
           ], &mut viewing);
           let focused_states = match viewing {
-            0 => &invalid_states,
-            1 => &theorem_1_states,
-            2 => &not_t1_states,
-            3 => &state_list,
-            _ => unimplemented!()
+            0 => &combine(
+              state_data.get_list(Classification::InvalidOther), 
+              state_data.get_list(Classification::InvalidT1)
+            ),
+            1 => state_data.get_list(Classification::InvalidT1),
+            2 => state_data.get_list(Classification::InvalidOther),
+            3 => state_data.get_list(Classification::Valid),
+            _ => unreachable!()
           };
           if old_viewing != viewing || just_pressed {
             if !focused_states.is_empty() {
@@ -101,8 +125,8 @@ async fn main() {
                 }
               }
             }
-            let analysis = frequency_analysis(focused_states, max);
-            parsed_analysis = parse_analysis(analysis, max, graph.nodes.len() as u8);
+            // let analysis = frequency_analysis(focused_states, max);
+            // parsed_analysis = parse_analysis(analysis, max, graph.nodes.len() as u8);
           }
           
 
@@ -121,81 +145,50 @@ async fn main() {
           }
 
           // Analysis Window
-          widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
-            .label("Analysis")
-            .ui(ui, |ui| {
-              let mut y = 0.;
-              for (value, values) in parsed_analysis.iter().enumerate() {
-                for (node_count, state_count) in values.iter().enumerate() {
-                  ui.label(Vec2::new(0., y),
-                  &format!("{state_count} {} {} {value}{}",
-                    if *state_count == 1 {"state has"} else {"states have"},
-                    Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
-                    if node_count == 1 { "" } else {"s"}
-                  )
-                );
-                y += 10.;
-                  
-                }
-              }
-
-          });
+          // widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
+            // .label("Analysis")
+          //   .ui(ui, |ui| {
+          //     let mut y = 0.;
+          //     for (value, values) in parsed_analysis.iter().enumerate() {
+          //       for (node_count, state_count) in values.iter().enumerate() {
+          //         ui.label(Vec2::new(0., y),
+          //         &format!("{state_count} {} {} {value}{}",
+          //           if *state_count == 1 {"state has"} else {"states have"},
+          //           Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
+          //           if node_count == 1 { "" } else {"s"}
+          //         )
+          //       );
+          //       y += 10.;
+          //
+          //       }
+          //     }
+          //
+          // });
 
         }
     });
 
-    radius = if let Ok(radius) = radius_str.parse::<f32>() { radius } else { radius };
+    ui_data.parse_radius();
 
     if !root_ui().is_mouse_over(mouse_position().into()) {
       let mouse_pos = Vec2::from(mouse_position()).as_ivec2();
-      nodes.hovering = graph.node_at(mouse_pos, radius);
-      match edit_mode {
-        0 => create_nodes_neighbors(&mut graph, &mut nodes, mouse_pos, radius),
+      nodes.hovering = graph.node_at(mouse_pos, ui_data.radius);
+      match ui_data.edit_mode {
+        0 => create_nodes_neighbors(&mut graph, &mut nodes, mouse_pos, ui_data.radius),
         1 => remove_node(&mut graph, &mut nodes),
         2 => drag_nodes(&mut graph, &mut nodes, mouse_pos),
-        3 => modify(&mut graph, &mut nodes, &modify_val, &max_str),
-        4 => set(&mut graph, &mut nodes, &modify_val, &max_str),
+        3 => modify(&mut graph, &mut nodes, &ui_data.modify_str, &ui_data.max_str),
+        4 => set(&mut graph, &mut nodes, &ui_data.modify_str, &ui_data.max_str),
         _ => (),
       }
     }
 
-    graph.render(radius);
+    graph.render(ui_data.radius);
 
     next_frame().await
   }
 }
 
-
-fn find_theorem_1(graph: &Graph, invalid_states: &Vec<Vec<u8>>, max: u8) -> (Vec<Vec<u8>>, Vec<Vec<u8>>) {
-  if invalid_states.is_empty() { return (Vec::new(), Vec::new()) }
-  let mut theorem_1_states = Vec::new();
-  let mut not_t1_states = Vec::new();
-  let node_count = invalid_states[0].len();
-
-  'state: for state in invalid_states {
-    // Check each closed neighborhood
-    'neighborhood: for node in 0 .. node_count {
-      let neighbors = &graph.nodes.get(node).unwrap().neighbors;
-      let mut has_zero = false;
-      let mut has_max = false;
-      has_zero |= state[node] == 0;
-      has_max |= state[node] == max;
-
-      for neighbor in neighbors {
-        has_zero |= state[*neighbor] == 0;
-        has_max |= state[*neighbor] == max;
-        if has_zero & has_max {
-          continue 'neighborhood
-        }
-      }
-      not_t1_states.push(state.clone());
-      continue 'state;
-    }
-    theorem_1_states.push(state.clone());
-  }
-
-  (theorem_1_states, not_t1_states)
-}
 
 // Returns a count of how many of each node value each state has
 // Per state, how many nodes have a value
@@ -224,33 +217,4 @@ fn parse_analysis(analysis: Vec<Vec<u32>>, max: u8, node_count: u8) -> Vec<Vec<u
   }
   result
 }
-
-// Written by ai, don't trust
-fn find_invalid(valid_states: &AHashSet<Vec<u8>>, max_value: u8) -> Vec<Vec<u8>> {
-  if valid_states.is_empty() { return Vec::new() }
-  let n = valid_states.iter().next().unwrap().len(); // length of each vector
-  let base = (max_value as usize) + 1;
-  let total_states = base.pow(n as u32);
-
-  let mut missing = Vec::new();
-
-  for num in 0..total_states {
-    let mut state = Vec::with_capacity(n);
-    let mut rem = num;
-
-    // Convert number to base-(max_value+1)
-    for _ in 0..n {
-      state.push((rem % base) as u8);
-      rem /= base;
-    }
-
-    if !valid_states.contains(&state) {
-      missing.push(state);
-    }
-  }
-
-  missing.sort();
-  missing
-}
-
 

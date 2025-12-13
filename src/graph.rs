@@ -113,7 +113,7 @@ impl Graph {
     }
   }
 
-  fn contiguize(&mut self) {
+  pub fn contiguize(&mut self) {
     let fix = self.nodes.trim();
     for idx in 0 .. self.nodes.len() {
       let node = self.nodes.get_mut(idx).unwrap();
@@ -125,37 +125,18 @@ impl Graph {
     }
   }
 
-  // I should be able to unify these but that isn't yet worth the rewrite
-
-  /// Defrags the graph, potentially changing all indices
-  pub fn all_possible_states(&mut self, max_value: u8) -> AHashSet<Vec<u8>> {
-    self.contiguize();
-
-    let count = self.nodes.len();
-    if count == 0 { return AHashSet::new(); }
-    let initial_state = vec![0u8; count];
-    let mut states = AHashSet::from([initial_state.clone()]);
-    let mut stack = vec![(initial_state, 0u8)];
-    
-    while let Some((mut state, op_idx)) = stack.pop() {
-      if op_idx + 1 >> 1 < count as u8 { stack.push((state.clone(), op_idx + 1)) }
-      let idx = op_idx >> 1;
-      // We want to move apply a value of -1 if op_idx & 1 == 0 and 1 if op_idx & 1 == 1
-      let operation = -1 + 2 * (op_idx & 0b1) as i8;
-
-      state[idx as usize] = state[idx as usize].saturating_add_signed(operation).min(max_value);
-      for neighbor in &self.nodes.get(idx as usize).unwrap().neighbors {
-        state[*neighbor] = state[*neighbor].saturating_add_signed(operation).min(max_value);
-      }
-
-      if states.insert(state.clone()) { stack.push((state, 0)) }
+  /// Assumes graph has already been contiguized by [Self::contiguize]
+  pub fn get_neighbors(&self) -> Vec<Vec<usize>> {
+    let mut neigbors = Vec::new();
+    for (_, node) in self.nodes.iter() {
+      neigbors.push(node.neighbors.clone());
     }
-
-    states
+    neigbors
   }
 
-  pub fn non_overflowing_neighborhood_state_space(&mut self, max_value: u8) -> AHashSet<Vec<u8>> {
+  pub fn determine_state_space(&mut self, all_states: AHashSet<Vec<u8>>, max_value: u8) -> AHashSet<Vec<u8>> {
     self.contiguize();
+    let neighbors = self.get_neighbors();
 
     let count = self.nodes.len();
     if count == 0 { return AHashSet::new(); }
