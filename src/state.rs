@@ -4,7 +4,7 @@ use crate::graph::Graph;
 // Consider dumping the hashmap in exchange for just a sorted vec
 
 pub type PackedState = u128;
-struct StateOps;
+pub struct StateOps;
 impl StateOps {
  
   const fn bits_per_digit(base: u8) -> usize {

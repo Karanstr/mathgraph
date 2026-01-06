@@ -4,11 +4,11 @@ use graph::Graph;
 use macroquad::ui::*;
 use num2words::Lang::English;
 use num2words::Num2Words;
+use crate::state::*;
 
 mod edit_functions;
 use edit_functions::*;
 
-use crate::state::{Classification, StateData, PackedState};
 fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
   let mut out = Vec::with_capacity(a.len() + b.len());
   out.extend_from_slice(a);
@@ -58,7 +58,7 @@ async fn main() {
 
   let mut current_view_str = "1".to_string();
   let mut viewing = 0;
-  // let mut parsed_analysis = Vec::new();
+  let mut parsed_analysis = Vec::new();
 
   loop {
     // Controls Window
@@ -73,11 +73,11 @@ async fn main() {
           "Move",        // 2
           "Modify",      // 3
           "Set",         // 4
-          "Analyze",      // 5
+          "Analyze",     // 5
         ], &mut ui_data.edit_mode);
         if ui_data.edit_mode == 0 || ui_data.edit_mode == 1 {
           state_data = None;
-          // parsed_analysis.clear();
+          parsed_analysis.clear();
           current_view_str = "1".to_string();
         }
         if ui_data.edit_mode == 3 { ui.input_text(hash!(), "Delta", &mut ui_data.modify_str); }
@@ -87,11 +87,9 @@ async fn main() {
           let max = ui_data.max_str.parse::<u8>().unwrap_or_default();
 
           // Compute new state data
-          let mut just_pressed = false;
-          if ui.button(Vec2::new(5., 110.), "GO") {
-            state_data = StateData::new(&mut graph, max + 1);
-            just_pressed = true;
-          }
+          let just_generated = ui.button(Vec2::new(5., 110.), "GO");
+          if just_generated { state_data = StateData::new(&mut graph, max + 1); }
+          // If we have valid states, display relevant ui elements
           if let Some(state_space) = &mut state_data {
 
             let total = (state_space.base as usize).pow(state_space.length as u32);
@@ -114,8 +112,8 @@ async fn main() {
               3 => state_space.get_list(Classification::Valid),
               _ => unreachable!()
             };
-            // Load first view
-            if old_viewing != viewing || just_pressed {
+            // Load view
+            if old_viewing != viewing || just_generated {
               if !focused_states.is_empty() {
                 let current_viewed = current_view_str.parse::<usize>().unwrap_or_default();
                 if let Some(state) = focused_states.get(current_viewed.saturating_sub(1)) {
@@ -125,8 +123,8 @@ async fn main() {
                   }
                 }
               }
-              // let analysis = frequency_analysis(focused_states, max);
-              // parsed_analysis = parse_analysis(analysis, max, graph.nodes.len() as u8);
+              let analysis = frequency_analysis(focused_states, graph.node_count(), max);
+              parsed_analysis = parse_analysis(analysis, max, graph.nodes.len() as u8);
             }
 
             ui.input_text(
@@ -148,25 +146,25 @@ async fn main() {
 
 
           // Analysis Window
-          // widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
-            // .label("Analysis")
-          //   .ui(ui, |ui| {
-          //     let mut y = 0.;
-          //     for (value, values) in parsed_analysis.iter().enumerate() {
-          //       for (node_count, state_count) in values.iter().enumerate() {
-          //         ui.label(Vec2::new(0., y),
-          //         &format!("{state_count} {} {} {value}{}",
-          //           if *state_count == 1 {"state has"} else {"states have"},
-          //           Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
-          //           if node_count == 1 { "" } else {"s"}
-          //         )
-          //       );
-          //       y += 10.;
-          //
-          //       }
-          //     }
-          //
-          // });
+          widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
+            .label("Analysis")
+            .ui(ui, |ui| {
+              let mut y = 0.;
+              for (value, values) in parsed_analysis.iter().enumerate() {
+                for (node_count, state_count) in values.iter().enumerate() {
+                  ui.label(Vec2::new(0., y),
+                  &format!("{state_count} {} {} {value}{}",
+                    if *state_count == 1 {"state has"} else {"states have"},
+                    Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
+                    if node_count == 1 { "" } else {"s"}
+                  )
+                );
+                y += 10.;
+
+                }
+              }
+
+          });
 
         }
     });
@@ -196,12 +194,15 @@ async fn main() {
 // Returns a count of how many of each node value each state has
 // Per state, how many nodes have a value
 // result[state][value] = node_count
-fn frequency_analysis(states: &Vec<Vec<u8>>, max: u8) -> Vec<Vec<u32>> {
+fn frequency_analysis(states: &Vec<PackedState>, length: usize, max: u8) -> Vec<Vec<u32>> {
   if states.is_empty() { return Vec::new() }
   let mut result = Vec::new();
+  let base = max as usize + 1;
   for state in states {
-    let mut count = vec![0; max as usize + 1];
-    for node in 0 .. state.len() { count[state[node] as usize] += 1; }
+    let mut count = vec![0; base];
+    for idx in 0 .. length { 
+      count[StateOps::get(*state, idx, base as u8, length) as usize] += 1;
+    }
     result.push(count);
   }
   result

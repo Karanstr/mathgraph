@@ -101,7 +101,6 @@ impl Graph {
 
 }
 
-// Exciting logic stuff
 impl Graph {
 
   pub fn clamped_update(&mut self, node_idx: usize, delta: i8, max: u8) {
