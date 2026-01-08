@@ -1,7 +1,6 @@
 use ahash::AHashMap;
 
 use crate::graph::Graph;
-// Consider dumping the hashmap in exchange for just a sorted vec
 
 pub type PackedState = u128;
 pub struct StateOps;
@@ -76,6 +75,7 @@ pub enum Classification {
   InvalidT1,
   InvalidOther,
 }
+
 pub struct StateData {
   meta: AHashMap<PackedState, Classification>,
   pub states: [Vec<PackedState>; 3], // One vec per Classification
@@ -122,7 +122,6 @@ impl StateData {
   }
 
 }
-
 impl StateData {
   fn generate_valid(&mut self, neighbors: &Vec<Vec<usize>>) {
     let count = neighbors.len();
@@ -201,4 +200,11 @@ impl StateData {
     return true;
   }
 
+}
+
+pub fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
+  let mut out = Vec::with_capacity(a.len() + b.len());
+  out.extend_from_slice(a);
+  out.extend_from_slice(b);
+  out
 }

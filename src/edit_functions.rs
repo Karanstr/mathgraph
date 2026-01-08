@@ -2,7 +2,15 @@ use macroquad::prelude::*;
 use crate::graph::Graph;
 use crate::Nodes;
 
-pub fn create_nodes_neighbors(graph: &mut Graph, nodes: &mut Nodes, mouse_pos: IVec2, radius: f32) {
+pub fn add_remove(graph: &mut Graph, nodes: &mut Nodes, mouse_pos: IVec2, radius: f32) {
+  
+  // Delete on right click
+  if is_mouse_button_down(MouseButton::Right) {
+    if let Some(remove) = nodes.hovering {
+      graph.remove(remove);
+    }
+  }
+
   // Place a node if it won't overlap existing nodes. If hovering node, select it.
   if is_mouse_button_pressed(MouseButton::Left) {
     if graph.node_at(mouse_pos, radius).is_none() {
@@ -47,28 +55,23 @@ pub fn drag_nodes(graph: &mut Graph, nodes: &mut Nodes, mouse_pos: IVec2) {
   }
 }
 
-pub fn remove_node(graph: &mut Graph, nodes: &mut Nodes) {
-  if is_mouse_button_down(MouseButton::Left) {
-    if let Some(remove) = nodes.hovering {
-      graph.remove(remove);
-    }
-  }
-}
+pub fn modify(graph: &mut Graph, nodes: &mut Nodes, max: &String) {
+  let delta = 
+    if is_mouse_button_pressed(MouseButton::Left) { 1 }
+    else if is_mouse_button_pressed(MouseButton::Right) { -1 }
+    else { 0 } as i8
+  ;
 
-pub fn modify(graph: &mut Graph, nodes: &mut Nodes, modify_val: &String, max: &String) {
-  if let Ok(delta) = modify_val.parse::<i8>()
-    && let Ok(max) = max.parse::<u8>()
-      && let Some(node) = nodes.hovering
-      && is_mouse_button_released(MouseButton::Left) {
-        graph.clamped_update(node, delta, max);
+  if let Ok(max) = max.parse::<u8>() && let Some(node) = nodes.hovering {
+    graph.clamped_update(node, delta, max);
   }
 }
 
 pub fn set(graph: &mut Graph, nodes: &mut Nodes, modify_val: &String, max: &String) {
   if let Ok(value) = modify_val.parse::<u8>()
     && let Ok(max) = max.parse::<u8>()
-      && let Some(node) = nodes.hovering
-      && is_mouse_button_down(MouseButton::Left) {
-        graph.nodes.get_mut(node).unwrap().value = value.min(max);
+    && let Some(node) = nodes.hovering
+    && is_mouse_button_down(MouseButton::Left) {
+      graph.nodes.get_mut(node).unwrap().value = value.min(max);
   }
 }

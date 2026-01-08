@@ -4,17 +4,11 @@ use graph::Graph;
 use macroquad::ui::*;
 use num2words::Lang::English;
 use num2words::Num2Words;
-use crate::state::*;
+use state::*;
 
 mod edit_functions;
 use edit_functions::*;
 
-fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
-  let mut out = Vec::with_capacity(a.len() + b.len());
-  out.extend_from_slice(a);
-  out.extend_from_slice(b);
-  out
-}
 
 struct Nodes {
   hovering: Option<usize>,
@@ -26,7 +20,7 @@ struct UiData {
   radius_str: String,
   radius: f32,
   edit_mode: usize,
-  modify_str: String,
+  set_str: String,
   max_str: String,
 }
 impl UiData {
@@ -35,7 +29,7 @@ impl UiData {
       radius_str: "40.0".to_string(),
       radius: 40.,
       edit_mode: 0,
-      modify_str: "1".to_string(),
+      set_str: "1".to_string(),
       max_str: "2".to_string(),
     }
   }
@@ -43,6 +37,14 @@ impl UiData {
   pub fn parse_radius(&mut self) {
     if let Ok(radius) = self.radius_str.parse::<f32>() { self.radius = radius };
   }
+
+}
+
+struct GraphProgram {
+  ui_data: UiData,
+  state_data: StateData,
+  graph: Graph,
+  nodes: Nodes,
 
 }
 
@@ -68,21 +70,20 @@ async fn main() {
         ui.input_text(hash!(), "Radius", &mut ui_data.radius_str);
         ui.input_text(hash!(), "Max", &mut ui_data.max_str);
         ui.combo_box(hash!(), "Mode", &[
-          "Add/Connect", // 0
-          "Remove",      // 1
-          "Move",        // 2
-          "Modify",      // 3
-          "Set",         // 4
-          "Analyze",     // 5
+          "Add/Remove", // 0
+          "Drag",        // 1
+          "Play",      // 2
+          "Set",         // 3
+          "Analyze",     // 4
         ], &mut ui_data.edit_mode);
-        if ui_data.edit_mode == 0 || ui_data.edit_mode == 1 {
+
+        if ui_data.edit_mode == 0 {
           state_data = None;
           parsed_analysis.clear();
           current_view_str = "1".to_string();
         }
-        if ui_data.edit_mode == 3 { ui.input_text(hash!(), "Delta", &mut ui_data.modify_str); }
-        if ui_data.edit_mode == 4 { ui.input_text(hash!(), "Value", &mut ui_data.modify_str); }
-        if ui_data.edit_mode == 5 {
+        if ui_data.edit_mode == 3 { ui.input_text(hash!(), "Value", &mut ui_data.set_str); }
+        if ui_data.edit_mode == 4 {
 
           let max = ui_data.max_str.parse::<u8>().unwrap_or_default();
 
@@ -175,11 +176,10 @@ async fn main() {
       let mouse_pos = Vec2::from(mouse_position()).as_ivec2();
       nodes.hovering = graph.node_at(mouse_pos, ui_data.radius);
       match ui_data.edit_mode {
-        0 => create_nodes_neighbors(&mut graph, &mut nodes, mouse_pos, ui_data.radius),
-        1 => remove_node(&mut graph, &mut nodes),
-        2 => drag_nodes(&mut graph, &mut nodes, mouse_pos),
-        3 => modify(&mut graph, &mut nodes, &ui_data.modify_str, &ui_data.max_str),
-        4 => set(&mut graph, &mut nodes, &ui_data.modify_str, &ui_data.max_str),
+        0 => add_remove(&mut graph, &mut nodes, mouse_pos, ui_data.radius),
+        1 => drag_nodes(&mut graph, &mut nodes, mouse_pos),
+        2 => modify(&mut graph, &mut nodes, &ui_data.max_str),
+        3 => set(&mut graph, &mut nodes, &ui_data.set_str, &ui_data.max_str),
         _ => (),
       }
     }
