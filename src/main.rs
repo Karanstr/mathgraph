@@ -51,6 +51,8 @@ impl UserMode {
 }
 
 struct GraphProgram {
+  // We cache this because computation is so expensive, so we only recompute if we need to
+  // Could be threaded, but that's a lot of work atm
   data: Option<StateData>,
   graph: Graph,
   mode: UserMode,
@@ -70,31 +72,22 @@ impl GraphProgram {
 
   pub async fn run(mut self) {
     loop {
-      widgets::Window::new(hash!(), vec2(0., 0.), vec2(250., 150.)).label("Settings")
-        .ui(&mut *root_ui(), |ui| {
-          
-          ui.input_text(hash!(), "Max", &mut self.max_str);
-          self.max = self.max_str.parse().unwrap_or(self.max);
-          self.graph.correct_max(self.max);
 
-          let mut cur_mode = self.mode.as_int();
-          ui.combo_box(hash!(), "Mode", &[
-            "Add/Remove",
-            "Drag",
-            "Play",
-            "Set",
-            "Analyze",
-          ], &mut cur_mode);
+      widgets::Window::new(hash!(), vec2(0., 0.), vec2(250., 150.))
+        .label("Settings")
+        .ui(&mut *root_ui(), |ui| 
+      {
 
-          let potential_mode = UserMode::from_int(cur_mode);
-          if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
+        self.handle_max(ui);
 
-          if matches!(self.mode, UserMode::Analyze { .. } ) { self.handle_analysis(ui); }
+        self.determine_mode(ui);
 
-          // We can only interact with the canvas when we aren't hovering ui
-          if !ui.is_mouse_over(mouse_position().into()) { self.handle_interactions(ui); }
+        self.handle_mode_ui(ui);
 
-        });
+        // We can only interact with the canvas when we aren't hovering ui
+        if !ui.is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
+
+      });
 
       self.graph.render(NODE_RADIUS);
 
@@ -102,8 +95,130 @@ impl GraphProgram {
     }
   }
 
+  fn handle_max(&mut self, ui: &mut Ui) {
+    ui.input_text(hash!(), "Max", &mut self.max_str);
+    self.max = self.max_str.parse().unwrap_or(self.max);
+    self.graph.correct_max(self.max);
+  }
+
+  fn determine_mode(&mut self, ui: &mut Ui) {
+    let mut cur_mode = self.mode.as_int();
+    ui.combo_box(hash!(), "Mode", &[
+      "Add/Remove",
+      "Drag",
+      "Play",
+      "Set",
+      "Analyze",
+    ], &mut cur_mode);
+
+    let potential_mode = UserMode::from_int(cur_mode);
+    if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
+  }
+
+  fn handle_mode_ui(&mut self, ui: &mut Ui) {
+    match &mut self.mode {
+      UserMode::Set { value } => {
+
+        let mut val_str = value.to_string();
+        ui.input_text(hash!(), "Value", &mut val_str);
+        *value = val_str.parse().unwrap_or(*value);
+
+      }
+      UserMode::Analyze { 
+        viewing_type,
+        viewing_idx,
+        idx_string,
+        parsed_analysis
+      } => {
+
+        let just_generated = ui.button(Vec2::new(5., 110.), "GO");
+        if just_generated { self.data = StateData::new(&mut self.graph, self.max + 1); }
+
+        // If we have valid states, display relevant ui elements
+        if let Some(state_space) = &mut self.data {
+
+          let total = (state_space.base as usize).pow(state_space.length as u32);
+          ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
+
+          // Identify view type
+          let old_type = *viewing_type;
+          ui.combo_box(hash!(), "Mode", &[
+            "All Invalid",    // 0
+            "Bad States",     // 1
+            "NotBad States",  // 2
+            "All Valid",      // 3
+          ], &mut *viewing_type);
+          let focused_states = match *viewing_type {
+            0 => &combine(
+              state_space.get_list(Classification::InvalidOther), 
+              state_space.get_list(Classification::InvalidT1)
+            ),
+            1 => state_space.get_list(Classification::InvalidT1),
+            2 => state_space.get_list(Classification::InvalidOther),
+            3 => state_space.get_list(Classification::Valid),
+            _ => unreachable!()
+          };
+          
+          // Identify view idx
+          ui.input_text(
+            hash!(),
+            &format!("/{} Viewed States", focused_states.len()),
+            idx_string
+          );
+          *viewing_idx = idx_string.parse().unwrap_or(*viewing_idx);
+
+          // Load view
+          if old_type != *viewing_type || just_generated {
+            let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max);
+            *parsed_analysis = parse_analysis(analysis, self.max, self.graph.nodes.len() as u8);
+          }
+
+          // Load current viewing state
+          if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
+            let new_state = state_space.parse_state(*state);
+            for idx in 0 .. self.graph.nodes.len() {
+              self.graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
+            }
+          }
+        
+          self.draw_analysis_window(ui);
+        }
+        
+      }
+      _ => {}
+    }
+  }
+
+  fn draw_analysis_window(&self, ui: &mut Ui) {
+    if let UserMode::Analyze { parsed_analysis, .. } = &self.mode {
+      widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
+        .label("Analysis")
+        .ui(ui, |ui| 
+      {
+        let mut y = 0.;
+
+        for (value, values) in parsed_analysis.iter().enumerate() {
+          for (node_count, state_count) in values.iter().enumerate() {
+            ui.label(Vec2::new(0., y),
+              &format!
+              (
+                "{state_count} {} {} {value}{}",
+                if *state_count == 1 {"state has"} else {"states have"},
+                Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
+                if node_count == 1 { "" } else {"s"}
+              )
+            );
+
+            y += 10.;
+          }
+        }
+
+      });
+    }
+  }
+
   // I don't really wanna make separate functions but I probably will.
-  fn handle_interactions(&mut self, ui: &mut Ui) {
+  fn handle_interactions(&mut self) {
     // Silly borrow issue
     let hovering = self.get_hovering();
     
@@ -151,13 +266,9 @@ impl GraphProgram {
       },
       UserMode::Drag { selected} => {
 
-        if is_mouse_button_pressed(MouseButton::Left) {
-          *selected = hovering;
-        }
-        if is_mouse_button_released(MouseButton::Left) {
-          *selected = None;
-        }
-        
+        if is_mouse_button_pressed(MouseButton::Left) { *selected = hovering; }
+        if is_mouse_button_released(MouseButton::Left) { *selected = None; }
+
         if let Some(dragging) = *selected {
           self.graph.nodes.get_mut(dragging).unwrap().position = Self::get_mouse_pos();
         }
@@ -171,108 +282,23 @@ impl GraphProgram {
           else { 0 } as i8
         ;
 
-        if let Some(node) = self.get_hovering() {
+        if let Some(node) = hovering && delta != 0 {
           self.graph.clamped_update(node, delta, self.max);
         }
 
       },
       UserMode::Set { value } => {
 
-        let mut set_val = value.to_string();
-        ui.input_text(hash!(), "Value", &mut set_val);
-
-        if let Ok(value) = set_val.parse::<u8>()
-          && let Some(node) = self.get_hovering()
-          && value <= self.max
-        { self.graph.nodes.get_mut(node).unwrap().value = value; }
+        if let Some(node) = hovering 
+          && *value <= self.max 
+          && is_mouse_button_pressed(MouseButton::Left)
+        {
+          self.graph.nodes.get_mut(node).unwrap().value = *value;
+        }
 
       },
-      UserMode::Analyze { .. } => { }
+      _ => {}
     }
-  }
-
-  fn handle_analysis(&mut self, ui: &mut Ui) {
-    
-    let UserMode::Analyze { 
-      ref mut viewing_type,
-      ref mut viewing_idx,
-      ref mut idx_string,
-      ref mut parsed_analysis
-    } = self.mode else { return; };
-      
-    // Compute new state data
-    let just_generated = ui.button(Vec2::new(5., 110.), "GO");
-    if just_generated { self.data = StateData::new(&mut self.graph, self.max + 1); }
-    // If we have valid states, display relevant ui elements
-    if let Some(state_space) = &mut self.data {
-
-      let total = (state_space.base as usize).pow(state_space.length as u32);
-      ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
-
-      // Identify view type
-      let old_type = *viewing_type;
-      ui.combo_box(hash!(), "Mode", &[
-        "All Invalid",    // 0
-        "Bad States",     // 1
-        "NotBad States",  // 2
-        "All Valid",      // 3
-      ], &mut *viewing_type);
-      let focused_states = match *viewing_type {
-        0 => &combine(
-          state_space.get_list(Classification::InvalidOther), 
-          state_space.get_list(Classification::InvalidT1)
-        ),
-        1 => state_space.get_list(Classification::InvalidT1),
-        2 => state_space.get_list(Classification::InvalidOther),
-        3 => state_space.get_list(Classification::Valid),
-        _ => unreachable!()
-      };
-      
-      // Identify view idx
-      ui.input_text(
-        hash!(),
-        &format!("/{} Viewed States", focused_states.len()),
-        idx_string
-      );
-      *viewing_idx = idx_string.parse().unwrap_or(*viewing_idx);
-
-      // Load view
-      if old_type != *viewing_type || just_generated {
-        let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max);
-        *parsed_analysis = parse_analysis(analysis, self.max, self.graph.nodes.len() as u8);
-      }
-
-      // Load current viewing state
-      if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
-        let new_state = state_space.parse_state(*state);
-        for idx in 0 .. self.graph.nodes.len() {
-          self.graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
-        }
-      }
-    }
-    
-
-
-    // Analysis Window
-    widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
-      .label("Analysis")
-      .ui(ui, |ui| {
-        let mut y = 0.;
-        for (value, values) in parsed_analysis.iter().enumerate() {
-          for (node_count, state_count) in values.iter().enumerate() {
-            ui.label(Vec2::new(0., y),
-            &format!("{state_count} {} {} {value}{}",
-              if *state_count == 1 {"state has"} else {"states have"},
-              Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
-              if node_count == 1 { "" } else {"s"}
-            )
-          );
-          y += 10.;
-
-          }
-        }
-
-    });
   }
 
   fn get_mouse_pos() -> IVec2 { Vec2::from(mouse_position()).as_ivec2() }
