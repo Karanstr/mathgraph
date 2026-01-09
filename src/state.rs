@@ -84,13 +84,13 @@ pub struct StateData {
 }
 impl StateData {
   pub fn new(graph: &mut Graph, base: u8) -> Option<Self> {
-    graph.contiguize();
+    graph.contiguize_and_trim();
 
     let length = graph.node_count();
+    if length == 0 { return None; }
     assert!(length * StateOps::bits_per_digit(base) <= 128);
 
     let neighbors = graph.get_neighbors();
-    if neighbors.is_empty() { return None; }
 
     let mut data = Self {
       meta: AHashMap::new(),

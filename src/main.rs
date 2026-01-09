@@ -14,7 +14,7 @@ enum UserMode {
   AddRemove { selected: Option<usize> },
   Drag { selected: Option<usize> },
   Play,
-  Set { value: u8 },
+  Set { value: u8, val_str: String },
   Analyze {
     viewing_type: usize,
     viewing_idx: usize,
@@ -38,22 +38,21 @@ impl UserMode {
       0 => UserMode::AddRemove { selected: None },
       1 => UserMode::Drag { selected: None },
       2 => UserMode::Play,
-      3 => UserMode::Set { value: 0 },
+      3 => UserMode::Set { value: 0, val_str: "0".to_string() },
       4 => UserMode::Analyze { 
         viewing_type: 0,
         viewing_idx: 1,
         idx_string: "1".to_string(),
-        parsed_analysis: Vec::new()
+        parsed_analysis: Vec::new(),
       },
       _ => unreachable!()
     }
   }
+
 }
 
 struct GraphProgram {
-  // We cache this because computation is so expensive, so we only recompute if we need to
-  // Could be threaded, but that's a lot of work atm
-  data: Option<StateData>,
+  state_space: Option<StateData>,
   graph: Graph,
   mode: UserMode,
   max: u8,
@@ -62,7 +61,7 @@ struct GraphProgram {
 impl GraphProgram {
   pub fn new() -> Self {
     Self {
-      data: None,
+      state_space: None,
       graph: Graph::new(),
       mode: UserMode::AddRemove { selected: None },
       max: 2,
@@ -80,7 +79,7 @@ impl GraphProgram {
 
         self.handle_max(ui);
 
-        self.determine_mode(ui);
+        self.set_mode(ui);
 
         self.handle_mode_ui(ui);
 
@@ -101,7 +100,7 @@ impl GraphProgram {
     self.graph.correct_max(self.max);
   }
 
-  fn determine_mode(&mut self, ui: &mut Ui) {
+  fn set_mode(&mut self, ui: &mut Ui) {
     let mut cur_mode = self.mode.as_int();
     ui.combo_box(hash!(), "Mode", &[
       "Add/Remove",
@@ -111,80 +110,76 @@ impl GraphProgram {
       "Analyze",
     ], &mut cur_mode);
 
+
     let potential_mode = UserMode::from_int(cur_mode);
     if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
   }
 
   fn handle_mode_ui(&mut self, ui: &mut Ui) {
     match &mut self.mode {
-      UserMode::Set { value } => {
+      UserMode::Set { value, val_str} => {
 
-        let mut val_str = value.to_string();
-        ui.input_text(hash!(), "Value", &mut val_str);
+        ui.input_text(hash!(), "Value", val_str);
         *value = val_str.parse().unwrap_or(*value);
 
       }
-      UserMode::Analyze { 
+      UserMode::Analyze {
         viewing_type,
         viewing_idx,
         idx_string,
         parsed_analysis
       } => {
+        if self.graph.node_count() == 0 { return }
 
-        let just_generated = ui.button(Vec2::new(5., 110.), "GO");
-        if just_generated { self.data = StateData::new(&mut self.graph, self.max + 1); }
+        self.state_space = StateData::new(&mut self.graph, self.max + 1);
+        let state_space = self.state_space.as_ref().unwrap();
 
-        // If we have valid states, display relevant ui elements
-        if let Some(state_space) = &mut self.data {
+        let total = (state_space.base as usize).pow(state_space.length as u32);
+        ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
 
-          let total = (state_space.base as usize).pow(state_space.length as u32);
-          ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
-
-          // Identify view type
-          let old_type = *viewing_type;
-          ui.combo_box(hash!(), "Mode", &[
-            "All Invalid",    // 0
-            "Bad States",     // 1
-            "NotBad States",  // 2
-            "All Valid",      // 3
-          ], &mut *viewing_type);
-          let focused_states = match *viewing_type {
-            0 => &combine(
-              state_space.get_list(Classification::InvalidOther), 
-              state_space.get_list(Classification::InvalidT1)
-            ),
-            1 => state_space.get_list(Classification::InvalidT1),
-            2 => state_space.get_list(Classification::InvalidOther),
-            3 => state_space.get_list(Classification::Valid),
-            _ => unreachable!()
-          };
-          
-          // Identify view idx
-          ui.input_text(
-            hash!(),
-            &format!("/{} Viewed States", focused_states.len()),
-            idx_string
-          );
-          *viewing_idx = idx_string.parse().unwrap_or(*viewing_idx);
-
-          // Load view
-          if old_type != *viewing_type || just_generated {
-            let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max);
-            *parsed_analysis = parse_analysis(analysis, self.max, self.graph.nodes.len() as u8);
-          }
-
-          // Load current viewing state
-          if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
-            let new_state = state_space.parse_state(*state);
-            for idx in 0 .. self.graph.nodes.len() {
-              self.graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
-            }
-          }
+        // Identify view type
+        let old_type = *viewing_type;
+        ui.combo_box(hash!(), "Mode", &[
+          "All Invalid",    // 0
+          "Bad States",     // 1
+          "NotBad States",  // 2
+          "All Valid",      // 3
+        ], &mut *viewing_type);
+        let focused_states = match *viewing_type {
+          0 => &combine(
+            state_space.get_list(Classification::InvalidOther), 
+            state_space.get_list(Classification::InvalidT1)
+          ),
+          1 => state_space.get_list(Classification::InvalidT1),
+          2 => state_space.get_list(Classification::InvalidOther),
+          3 => state_space.get_list(Classification::Valid),
+          _ => unreachable!()
+        };
         
-          self.draw_analysis_window(ui);
+        // Identify view idx
+        ui.input_text(
+          hash!(),
+          &format!("/{} Viewed States", focused_states.len()),
+          idx_string
+        );
+        *viewing_idx = idx_string.parse().unwrap_or(*viewing_idx);
+
+        if parsed_analysis.is_empty() || old_type == *viewing_type {
+          let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max);
+          *parsed_analysis = parse_analysis(analysis, self.max, self.graph.nodes.len() as u8);
         }
-        
-      }
+
+        // Load current viewing state
+        if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
+          let new_state = state_space.parse_state(*state);
+          for idx in 0 .. self.graph.nodes.len() {
+            self.graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
+          }
+        }
+      
+        self.draw_analysis_window(ui);
+      },
+ 
       _ => {}
     }
   }
@@ -217,7 +212,6 @@ impl GraphProgram {
     }
   }
 
-  // I don't really wanna make separate functions but I probably will.
   fn handle_interactions(&mut self) {
     // Silly borrow issue
     let hovering = self.get_hovering();
@@ -226,7 +220,7 @@ impl GraphProgram {
       UserMode::AddRemove { selected } => {
 
         // If we're changing the structure of the graph our statespace shifts.
-        self.data = None;
+        self.state_space = None;
         let mouse_pos = Self::get_mouse_pos();
 
         // Delete hovering on right click
@@ -287,7 +281,7 @@ impl GraphProgram {
         }
 
       },
-      UserMode::Set { value } => {
+      UserMode::Set { value, .. } => {
 
         if let Some(node) = hovering 
           && *value <= self.max 
