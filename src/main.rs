@@ -55,6 +55,7 @@ struct GraphProgram {
   graph: Graph,
   mode: UserMode,
   max: u8,
+  max_str: String,
 }
 impl GraphProgram {
   pub fn new() -> Self {
@@ -63,6 +64,7 @@ impl GraphProgram {
       graph: Graph::new(),
       mode: UserMode::AddRemove { selected: None },
       max: 2,
+      max_str: "2".to_string(),
     }
   }
 
@@ -71,8 +73,8 @@ impl GraphProgram {
       widgets::Window::new(hash!(), vec2(0., 0.), vec2(250., 150.)).label("Settings")
         .ui(&mut *root_ui(), |ui| {
           
-          let mut max_str = self.max.to_string();
-          ui.input_text(hash!(), "Max", &mut max_str);
+          ui.input_text(hash!(), "Max", &mut self.max_str);
+          self.max = self.max_str.parse().unwrap_or(self.max);
 
           let mut cur_mode = self.mode.as_int();
           ui.combo_box(hash!(), "Mode", &[
