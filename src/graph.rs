@@ -20,7 +20,7 @@ impl Node {
     }
   }
 
-  pub fn add_neighbor(&mut self, neighbor: usize) {
+  pub fn add_unique_neighbor(&mut self, neighbor: usize) {
     if !self.neighbors.contains(&neighbor) {
       self.neighbors.push(neighbor);
     }
@@ -41,10 +41,11 @@ impl Graph {
 
   pub fn node_count(&self) -> usize { self.nodes.iter().count() }
 
-  pub fn add_connection(&mut self, node1: usize, node2: usize) -> bool {
+  /// Adds neighbors if not neighbors already, otherwise does nothing
+  pub fn attempt_unique_connection(&mut self, node1: usize, node2: usize) -> bool {
     if self.nodes.is_occupied(node1) && self.nodes.is_occupied(node2) {
-      self.nodes.get_mut(node1).unwrap().add_neighbor(node2);
-      self.nodes.get_mut(node2).unwrap().add_neighbor(node1);
+      self.nodes.get_mut(node1).unwrap().add_unique_neighbor(node2);
+      self.nodes.get_mut(node2).unwrap().add_unique_neighbor(node1);
       true
     } else { false }
   }
