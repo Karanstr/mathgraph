@@ -104,6 +104,12 @@ impl Graph {
 
 impl Graph {
 
+  pub fn correct_max(&mut self, max: u8) {
+    for (_, node) in self.nodes.iter_mut() {
+      node.value = node.value.min(max);
+    }
+  }
+
   pub fn clamped_update(&mut self, node_idx: usize, delta: i8, max: u8) {
     let neighbors = if let Some(node) = self.nodes.get_mut(node_idx) {
       node.value = node.value.saturating_add_signed(delta).min(max);

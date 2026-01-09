@@ -75,6 +75,7 @@ impl GraphProgram {
           
           ui.input_text(hash!(), "Max", &mut self.max_str);
           self.max = self.max_str.parse().unwrap_or(self.max);
+          self.graph.correct_max(self.max);
 
           let mut cur_mode = self.mode.as_int();
           ui.combo_box(hash!(), "Mode", &[
