@@ -110,7 +110,6 @@ impl GraphProgram {
       "Analyze",
     ], &mut cur_mode);
 
-
     let potential_mode = UserMode::from_int(cur_mode);
     if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
   }
@@ -129,6 +128,7 @@ impl GraphProgram {
         idx_string,
         parsed_analysis
       } => {
+
         if self.graph.node_count() == 0 { return }
 
         self.state_space = StateData::new(&mut self.graph, self.max + 1);
@@ -164,7 +164,7 @@ impl GraphProgram {
         );
         *viewing_idx = idx_string.parse().unwrap_or(*viewing_idx);
 
-        if parsed_analysis.is_empty() || old_type == *viewing_type {
+        if parsed_analysis.is_empty() || old_type != *viewing_type {
           let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max);
           *parsed_analysis = parse_analysis(analysis, self.max, self.graph.nodes.len() as u8);
         }
@@ -178,6 +178,7 @@ impl GraphProgram {
         }
       
         self.draw_analysis_window(ui);
+
       },
  
       _ => {}
