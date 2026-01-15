@@ -1,4 +1,4 @@
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 
 use crate::graph::Graph;
 
@@ -16,11 +16,11 @@ impl StateOps {
     bits
   }
 
-  const fn digit_mask(base: u8) -> u128 {
+  const fn digit_mask(base: u8) -> PackedState {
     (1u128 << Self::bits_per_digit(base)) - 1
   }
 
-  pub fn get(state: u128, idx: usize, base: u8, length: usize) -> u8 {
+  pub fn get(state: PackedState, idx: usize, base: u8, length: usize) -> u8 {
     debug_assert!(idx < length);
     let shift = idx * Self::bits_per_digit(base);
     ((state >> shift) & Self::digit_mask(base)) as u8
@@ -45,7 +45,7 @@ impl StateOps {
     vec
   }
 
-  pub fn increment(mut state: PackedState, base: u8, length: usize) -> Option<u128> {
+  pub fn increment(mut state: PackedState, base: u8, length: usize) -> Option<PackedState> {
     let bits = Self::bits_per_digit(base);
     let mask = Self::digit_mask(base);
 
@@ -76,8 +76,20 @@ pub enum Classification {
   InvalidOther,
 }
 
+pub struct Metadata {
+  classification: Option<Classification>,
+  bubble: Option<usize>,
+}
+impl Metadata {
+  fn set_classification(&mut self, classification: Classification) { self.classification = Some(classification); }
+  fn set_bubble(&mut self, bubble_idx: usize) { self.bubble = Some(bubble_idx); }
+  fn classification(&self) -> Classification { self.classification.unwrap() }
+  fn bubble(&self) -> usize { self.bubble.unwrap() }
+}
+
 pub struct StateData {
-  meta: AHashMap<PackedState, Classification>,
+  pub meta: AHashMap<PackedState, Metadata>,
+  pub bubbles: Vec< Vec<PackedState> >,
   pub states: [Vec<PackedState>; 3], // One vec per Classification
   pub base: u8,
   pub length: usize,
@@ -94,6 +106,7 @@ impl StateData {
 
     let mut data = Self {
       meta: AHashMap::new(),
+      bubbles: Vec::new(),
       states: [Vec::new(), Vec::new(), Vec::new()],
       base,
       length,
@@ -103,6 +116,8 @@ impl StateData {
     let invalid = data.generate_invalid();
     data.classify_invalid(invalid, &neighbors);
     
+    data.identify_bubbles(&neighbors);
+
     Some(data)
   }
 
@@ -112,7 +127,11 @@ impl StateData {
 
   fn track_unique_state(&mut self, state: PackedState, classification: Classification) -> bool {
     if self.meta.contains_key(&state) { return false; }
-    self.meta.insert(state.clone(), classification);
+    let metadata = Metadata {
+      classification: Some(classification),
+      bubble: None
+    };
+    self.meta.insert(state.clone(), metadata);
     self.states[classification as usize].push(state);
     true
   }
@@ -124,27 +143,8 @@ impl StateData {
 }
 impl StateData {
   fn generate_valid(&mut self, neighbors: &Vec<Vec<usize>>) {
-    let count = neighbors.len();
-
-    let initial_state = 0;
-    self.track_unique_state(initial_state.clone(), Classification::Valid);
-    let mut stack = vec![(initial_state, 0u8)];
-    
-    while let Some((mut state, op_idx)) = stack.pop() {
-      if (op_idx + 1) >> 1 < count as u8 { stack.push((state.clone(), op_idx + 1)) }
-      let center_idx = (op_idx >> 1) as usize;
-      // We want to move apply a value of -1 if op_idx & 1 == 0 and 1 if op_idx & 1 == 1
-      let operation = -1 + 2 * (op_idx & 0b1) as i8;
-      
-      for idx in neighbors[center_idx].iter().chain(&[center_idx]) {
-        let old_node = StateOps::get(state, *idx, self.base, self.length);
-        let new_node = old_node.saturating_add_signed(operation).min(self.base - 1);
-        state = StateOps::set(state, *idx, new_node, self.base, self.length);
-      }
-
-      if self.track_unique_state(state.clone(), Classification::Valid) {
-        stack.push((state, 0));
-      }
+    for state in self.dfs(neighbors, 0, true) {
+      self.track_unique_state(state, Classification::Valid);
     }
   }
 
@@ -186,7 +186,7 @@ impl StateData {
       let mut has_max = false;
 
       for node in neighbor_indexes.iter().chain(&[central_idx])
-        .map(|idx| { StateOps::get(*state, *idx, self.base, self.length) })
+        .map( |idx| { StateOps::get(*state, *idx, self.base, self.length) } )
       {
         has_zero |= node == 0;
         has_max |= node == self.base - 1;
@@ -196,6 +196,65 @@ impl StateData {
       return false;
     }
     return true;
+  }
+
+  fn identify_bubbles(&mut self, neighbors: &Vec<Vec<usize>>) {
+    let mut seen_states = AHashSet::<PackedState>::new();
+
+    let mut smol_bubbles = Vec::new();
+
+    for initial_state in self.meta.keys() {
+      if seen_states.contains(initial_state) { continue }
+      let mut bubble = self.dfs(neighbors, *initial_state, false);
+      if bubble.len() == 1 { 
+        smol_bubbles.extend(bubble.drain());
+        continue;
+      }
+      let mut bubble_vec = Vec::with_capacity(bubble.len());
+      for state in bubble {
+        seen_states.insert(state);
+        bubble_vec.push(state);
+      }
+      self.bubbles.push(bubble_vec);
+    }
+
+    for (idx, bubble) in self.bubbles.iter().enumerate() {
+      for state in bubble {
+        self.meta.get_mut(&state).unwrap().set_bubble(idx);
+      }
+    }
+
+    for (idx, state) in smol_bubbles.iter().enumerate() {
+      self.meta.get_mut(&state).unwrap().set_bubble(idx);
+    }
+    self.bubbles.push(smol_bubbles);
+  
+  }
+
+  fn dfs(&self, neighbors: &Vec<Vec<usize>>, initial_state: PackedState, saturate: bool) -> AHashSet<PackedState> {
+    let count = neighbors.len();
+    let mut stack = vec![(initial_state, 0u8)];
+    let mut found_states = AHashSet::new();
+    found_states.insert(initial_state);
+    
+    'search: while let Some((mut state, op_idx)) = stack.pop() {
+      if (op_idx + 1) >> 1 < count as u8 { stack.push((state.clone(), op_idx + 1)) }
+      let center_idx = (op_idx >> 1) as usize;
+      // We want to apply a value of -1 if op_idx & 1 == 0 and 1 if op_idx & 1 == 1
+      let operation = -1 + (op_idx & 0b1) as i8 * 2;
+      
+      for idx in neighbors[center_idx].iter().chain(&[center_idx]) {
+        let old_node = StateOps::get(state, *idx, self.base, self.length);
+        let new_node = old_node.saturating_add_signed(operation).min(self.base - 1);
+        // If we don't allow saturation and saturate something, this candidate is disqualified
+        if old_node == new_node && !saturate { continue 'search }
+        state = StateOps::set(state, *idx, new_node, self.base, self.length);
+      }
+
+      if found_states.insert(state.clone()) { stack.push((state, 0)) }
+    }
+
+    found_states
   }
 
 }

@@ -2,6 +2,7 @@ mod graph; mod state;
 use std::mem::discriminant;
 
 use macroquad::prelude::*;
+use macroquad::input::KeyCode as RKeyCode;
 use graph::Graph;
 use macroquad::ui::*;
 use num2words::Lang::English;
@@ -18,11 +19,16 @@ enum UserMode {
   Analyze {
     viewing_type: usize,
     viewing_idx: usize,
+    viewing_length: usize,
     idx_string: String,
     parsed_analysis: Vec<Vec<u32>>,
   },
-  Explore {
-
+  Bubbles {
+    bubble_idx: usize,
+    bubble_string: String,
+    state_idx: usize,
+    state_string: String,
+    state_length: usize,
   },
 }
 impl UserMode {
@@ -33,7 +39,7 @@ impl UserMode {
       Self::Play => 2,
       Self::Set {..} => 3,
       Self::Analyze {..} => 4,
-      Self::Explore {..} => 5,
+      Self::Bubbles {..} => 5,
     }
   }
 
@@ -46,10 +52,17 @@ impl UserMode {
       4 => UserMode::Analyze { 
         viewing_type: 0,
         viewing_idx: 1,
+        viewing_length: 0,
         idx_string: "1".to_string(),
         parsed_analysis: Vec::new(),
       },
-      5 => UserMode::Explore {  },
+      5 => UserMode::Bubbles {
+        bubble_idx: 1,
+        bubble_string: "1".to_string(),
+        state_idx: 1,
+        state_string: "1".to_string(),
+        state_length: 0,
+      },
       _ => unreachable!()
     }
   }
@@ -112,12 +125,15 @@ impl GraphProgram {
       "Play",
       "Set",
       "Analyze",
+      "Bubbles",
     ], &mut cur_mode);
 
     let potential_mode = UserMode::from_int(cur_mode);
     if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
   }
 
+  // We're doing extra work here by reloading current state every frame, ideally we could extract
+  // this code into an update_graph function, but for now it's not enough for me to care
   fn handle_mode_ui(&mut self, ui: &mut Ui) {
     match &mut self.mode {
       UserMode::Set { value, val_str} => {
@@ -129,13 +145,16 @@ impl GraphProgram {
       UserMode::Analyze {
         viewing_type,
         viewing_idx,
+        viewing_length,
         idx_string,
         parsed_analysis
       } => {
 
         if self.graph.node_count() == 0 { return }
 
-        self.state_space = StateData::new(&mut self.graph, self.max + 1);
+        if self.state_space.is_none() {
+          self.state_space = StateData::new(&mut self.graph, self.max + 1);
+        }
         let state_space = self.state_space.as_ref().unwrap();
 
         let total = (state_space.base as usize).pow(state_space.length as u32);
@@ -159,6 +178,8 @@ impl GraphProgram {
           3 => state_space.get_list(Classification::Valid),
           _ => unreachable!()
         };
+
+        *viewing_length = focused_states.len();
         
         // Identify view idx
         ui.input_text(
@@ -175,16 +196,64 @@ impl GraphProgram {
 
         // Load current viewing state
         if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
-          let new_state = state_space.parse_state(*state);
-          for idx in 0 .. self.graph.nodes.len() {
-            self.graph.nodes.get_mut(idx).unwrap().value = new_state[idx];
-          }
+          self.graph.load_state(state_space.parse_state(*state));
         }
       
         self.draw_analysis_window(ui);
 
       },
- 
+      UserMode::Bubbles {
+        bubble_idx,
+        bubble_string,
+        state_idx,
+        state_string,
+        state_length,
+      } => {
+        
+        if self.graph.node_count() == 0 { return }
+
+        if self.state_space.is_none() {
+          self.state_space = StateData::new(&mut self.graph, self.max + 1);
+        }
+        let state_space = self.state_space.as_ref().unwrap();
+
+        // Identify view idx
+        ui.input_text(
+          hash!(),
+          &format!("/{} Viewed Bubbles", state_space.bubbles.len()),
+          bubble_string
+        );
+
+        let old_bubble_idx = *bubble_idx;
+        *bubble_idx = bubble_string.parse().unwrap_or(*bubble_idx);
+        if *bubble_idx != old_bubble_idx { 
+          *state_idx = 1;
+          *state_string = "1".to_string();
+        }
+        
+        let Some(bubble) = state_space.bubbles.get(bubble_idx.saturating_sub(1)) else {
+          return;
+        };
+        *state_length = bubble.len();
+
+        // Identify view idx
+        ui.input_text(
+          hash!(),
+          &format!("/{} Viewed States", bubble.len()),
+          state_string
+        );
+        *state_idx = state_string.parse().unwrap_or(*state_idx);
+
+        if *bubble_idx == state_space.bubbles.len() {
+          ui.label(Vec2::new(0., 100.), "Bubble of Size 1 Bubbles");
+        }
+
+        // Load current viewing state
+        if let Some(state) = bubble.get(state_idx.saturating_sub(1)) {
+          self.graph.load_state(state_space.parse_state(*state));
+        }
+      
+      },
       _ => {}
     }
   }
@@ -296,6 +365,46 @@ impl GraphProgram {
         }
 
       },
+      UserMode::Analyze {
+        viewing_idx,
+        idx_string, 
+        viewing_length,
+        ..
+      } => {
+
+        if is_key_pressed(RKeyCode::Left) {
+          if *viewing_idx == 1 { *viewing_idx = *viewing_length; } else {
+            *viewing_idx -= 1;
+          }
+          *idx_string = viewing_idx.to_string();
+        }
+        if is_key_pressed(RKeyCode::Right) {
+          *viewing_idx = (*viewing_idx + 1) % (*viewing_length + 1);
+          if *viewing_idx == 0 { *viewing_idx = 1; }
+          *idx_string = viewing_idx.to_string();
+        }
+
+      },
+      UserMode::Bubbles {
+        state_idx,
+        state_string,
+        state_length,
+        ..
+      } => {
+
+        if is_key_pressed(RKeyCode::Left) {
+          if *state_idx == 1 { *state_idx = *state_length; } else {
+            *state_idx -= 1;
+          }
+          *state_string = state_idx.to_string();
+        }
+        if is_key_pressed(RKeyCode::Right) {
+          *state_idx = (*state_idx + 1) % (*state_length + 1);
+          if *state_idx == 0 { *state_idx = 1; }
+          *state_string = state_idx.to_string();
+        }
+
+      }
       _ => {}
     }
   }

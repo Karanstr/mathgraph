@@ -3,20 +3,19 @@ use lilypads::Pond;
 use macroquad::shapes::*;
 use macroquad::color::*;
 use macroquad::text::draw_text;
-// use ahash::AHashSet;
 
 #[derive(Debug)]
-pub struct Node<T> where T: Default {
+pub struct Node {
   pub position: IVec2,
   pub neighbors: Vec<usize>,
-  pub value: T
+  pub value: u8
 }
-impl<T> Node<T> where T: Default {
+impl Node {
   pub fn new(position: IVec2) -> Self {
     Self {
       position,
       neighbors: Vec::with_capacity(0),
-      value: T::default(),
+      value: 0,
     }
   }
 
@@ -29,7 +28,7 @@ impl<T> Node<T> where T: Default {
 }
 
 pub struct Graph { 
-  pub nodes: Pond<Node<u8>>,
+  pub nodes: Pond<Node>,
 }
 // Boring management stuff
 impl Graph {
@@ -48,6 +47,12 @@ impl Graph {
       self.nodes.get_mut(node2).unwrap().add_unique_neighbor(node1);
       true
     } else { false }
+  }
+
+  pub fn load_state(&mut self, state: Vec<u8>) {
+    for (idx, node) in self.nodes.iter_mut() {
+      node.value = state[idx];
+    }
   }
 
   pub fn remove(&mut self, removed: usize) {
