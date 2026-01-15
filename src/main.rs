@@ -20,7 +20,10 @@ enum UserMode {
     viewing_idx: usize,
     idx_string: String,
     parsed_analysis: Vec<Vec<u32>>,
-  }
+  },
+  Explore {
+
+  },
 }
 impl UserMode {
   fn as_int(&self) -> usize {
@@ -30,6 +33,7 @@ impl UserMode {
       Self::Play => 2,
       Self::Set {..} => 3,
       Self::Analyze {..} => 4,
+      Self::Explore {..} => 5,
     }
   }
 
@@ -45,10 +49,10 @@ impl UserMode {
         idx_string: "1".to_string(),
         parsed_analysis: Vec::new(),
       },
+      5 => UserMode::Explore {  },
       _ => unreachable!()
     }
   }
-
 }
 
 struct GraphProgram {

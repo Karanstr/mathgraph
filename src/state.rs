@@ -127,7 +127,6 @@ impl StateData {
     let count = neighbors.len();
 
     let initial_state = 0;
-    // let initial_state = vec![0u8; count].into_boxed_slice();
     self.track_unique_state(initial_state.clone(), Classification::Valid);
     let mut stack = vec![(initial_state, 0u8)];
     
@@ -137,7 +136,6 @@ impl StateData {
       // We want to move apply a value of -1 if op_idx & 1 == 0 and 1 if op_idx & 1 == 1
       let operation = -1 + 2 * (op_idx & 0b1) as i8;
       
-      // state[idx as usize] = state[idx].saturating_add_signed(operation).min(self.base);
       for idx in neighbors[center_idx].iter().chain(&[center_idx]) {
         let old_node = StateOps::get(state, *idx, self.base, self.length);
         let new_node = old_node.saturating_add_signed(operation).min(self.base - 1);

@@ -6,17 +6,17 @@ use macroquad::text::draw_text;
 // use ahash::AHashSet;
 
 #[derive(Debug)]
-pub struct Node {
+pub struct Node<T> where T: Default {
   pub position: IVec2,
   pub neighbors: Vec<usize>,
-  pub value: u8
+  pub value: T
 }
-impl Node {
+impl<T> Node<T> where T: Default {
   pub fn new(position: IVec2) -> Self {
     Self {
       position,
       neighbors: Vec::with_capacity(0),
-      value: 0,
+      value: T::default(),
     }
   }
 
@@ -29,7 +29,7 @@ impl Node {
 }
 
 pub struct Graph { 
-  pub nodes: Pond<Node>,
+  pub nodes: Pond<Node<u8>>,
 }
 // Boring management stuff
 impl Graph {
@@ -142,42 +142,5 @@ impl Graph {
     neigbors
   }
 
-  // pub fn determine_state_space(&mut self, all_states: AHashSet<Vec<u8>>, max_value: u8) -> AHashSet<Vec<u8>> {
-  //   self.contiguize_and_trim();
-  //   let neighbors = self.get_neighbors();
-  //
-  //   let count = self.nodes.len();
-  //   if count == 0 { return AHashSet::new(); }
-  //   let mut initial_state = vec![0u8; count];
-  //   for (idx, node) in self.nodes.safe_data().iter().enumerate() {
-  //     // This is safe because contiguize promises only safe values exist
-  //     initial_state[idx] = node.unwrap().value;
-  //   }
-  //   let mut states = AHashSet::from([initial_state.clone()]);
-  //   let mut stack = vec![(initial_state, 0u8)];
-  //
-  //   'state_space: while let Some((mut state, op_idx)) = stack.pop() {
-  //     if op_idx + 1 >> 1 < count as u8 { stack.push((state.clone(), op_idx + 1)) }
-  //     let idx = op_idx >> 1;
-  //     // We want to move apply a value of -1 if op_idx & 1 == 0 and 1 if op_idx & 1 == 1
-  //     let operation = -1 + 2 * (op_idx & 0b1) as i8;
-  //     {
-  //       let new_val = state[idx as usize] as i8 + operation;
-  //       if new_val < 0 || new_val as u8 > max_value { continue 'state_space }
-  //       state[idx as usize] = state[idx as usize].checked_add_signed(operation).unwrap();
-  //     }
-  //     for neighbor in &self.nodes.get(idx as usize).unwrap().neighbors {
-  //       let new_val = state[*neighbor as usize] as i8 + operation;
-  //       if new_val < 0 || new_val as u8 > max_value { continue 'state_space }
-  //       state[idx as usize] = state[*neighbor as usize].checked_add_signed(operation).unwrap();
-  //     }
-  //
-  //     if states.insert(state.clone()) { stack.push((state, 0)) }
-  //   }
-  //
-  //   states
-  // }
-
 }
-
 
