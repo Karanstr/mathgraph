@@ -83,8 +83,8 @@ pub struct Metadata {
 impl Metadata {
   fn set_classification(&mut self, classification: Classification) { self.classification = Some(classification); }
   fn set_bubble(&mut self, bubble_idx: usize) { self.bubble = Some(bubble_idx); }
-  fn classification(&self) -> Classification { self.classification.unwrap() }
-  fn bubble(&self) -> usize { self.bubble.unwrap() }
+  pub fn classification(&self) -> Classification { self.classification.unwrap() }
+  pub fn bubble(&self) -> usize { self.bubble.unwrap() }
 }
 
 pub struct StateData {

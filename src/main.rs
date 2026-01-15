@@ -74,6 +74,7 @@ struct GraphProgram {
   mode: UserMode,
   max: u8,
   max_str: String,
+  current_state: PackedState
 }
 impl GraphProgram {
   pub fn new() -> Self {
@@ -83,6 +84,7 @@ impl GraphProgram {
       mode: UserMode::AddRemove { selected: None },
       max: 2,
       max_str: "2".to_string(),
+      current_state: 0
     }
   }
 
@@ -105,8 +107,19 @@ impl GraphProgram {
 
       });
 
-      self.graph.render(NODE_RADIUS);
+      let mut is_good = true;
+      if let Some(state_space) = &self.state_space {
+        if let Some(metadata) = state_space.meta.get(&self.current_state) {
+          if discriminant(&metadata.classification()) != discriminant(&Classification::Valid) {
+            is_good = false;
 
+          }
+        }
+
+      }
+
+      self.graph.render(NODE_RADIUS, is_good);
+      
       next_frame().await
     }
   }
@@ -197,6 +210,7 @@ impl GraphProgram {
         // Load current viewing state
         if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
           self.graph.load_state(state_space.parse_state(*state));
+          self.current_state = *state;
         }
       
         self.draw_analysis_window(ui);
@@ -251,6 +265,7 @@ impl GraphProgram {
         // Load current viewing state
         if let Some(state) = bubble.get(state_idx.saturating_sub(1)) {
           self.graph.load_state(state_space.parse_state(*state));
+          self.current_state = *state;
         }
       
       },
@@ -295,6 +310,7 @@ impl GraphProgram {
 
         // If we're changing the structure of the graph our statespace shifts.
         self.state_space = None;
+        self.current_state = 0;
         let mouse_pos = Self::get_mouse_pos();
 
         // Delete hovering on right click

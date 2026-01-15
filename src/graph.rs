@@ -73,7 +73,7 @@ impl Graph {
     None
   }
 
-  pub fn render(&self, radius: f32) {
+  pub fn render(&self, radius: f32, is_good: bool) {
     let mut circles: Vec<(IVec2, u8)> = Vec::new();
     for node in self.nodes.safe_data() {
       if let Some(node) = node {
@@ -94,7 +94,7 @@ impl Graph {
       draw_circle(
         pos.x as f32,
         pos.y as f32,
-        radius, RED
+        radius, if is_good { GREEN } else { RED }
       );
       draw_text(
         &format!("{value}"),
