@@ -1,80 +1,22 @@
-mod graph; mod state;
-use std::mem::discriminant;
+mod graph; mod state; mod utilities;
 
+use std::mem::discriminant;
 use macroquad::prelude::*;
-use macroquad::input::KeyCode as RKeyCode;
 use graph::Graph;
 use macroquad::ui::*;
 use num2words::Lang::English;
 use num2words::Num2Words;
 use state::*;
+use utilities::*;
 
 const NODE_RADIUS: f32 = 40.;
-
-enum UserMode {
-  AddRemove { selected: Option<usize> },
-  Drag { selected: Option<usize> },
-  Play,
-  Set { value: u8, val_str: String },
-  Analyze {
-    viewing_type: usize,
-    viewing_idx: usize,
-    viewing_length: usize,
-    idx_string: String,
-    parsed_analysis: Vec<Vec<u32>>,
-  },
-  Bubbles {
-    bubble_idx: usize,
-    bubble_string: String,
-    state_idx: usize,
-    state_string: String,
-    state_length: usize,
-  },
-}
-impl UserMode {
-  fn as_int(&self) -> usize {
-    match self {
-      Self::AddRemove {..} => 0,
-      Self::Drag {..} => 1,
-      Self::Play => 2,
-      Self::Set {..} => 3,
-      Self::Analyze {..} => 4,
-      Self::Bubbles {..} => 5,
-    }
-  }
-
-  fn from_int(val: usize) -> Self {
-    match val {
-      0 => UserMode::AddRemove { selected: None },
-      1 => UserMode::Drag { selected: None },
-      2 => UserMode::Play,
-      3 => UserMode::Set { value: 0, val_str: "0".to_string() },
-      4 => UserMode::Analyze { 
-        viewing_type: 0,
-        viewing_idx: 1,
-        viewing_length: 0,
-        idx_string: "1".to_string(),
-        parsed_analysis: Vec::new(),
-      },
-      5 => UserMode::Bubbles {
-        bubble_idx: 1,
-        bubble_string: "1".to_string(),
-        state_idx: 1,
-        state_string: "1".to_string(),
-        state_length: 0,
-      },
-      _ => unreachable!()
-    }
-  }
-}
 
 struct GraphProgram {
   state_space: Option<StateData>,
   graph: Graph,
   mode: UserMode,
-  max: u8,
-  max_str: String,
-  current_state: PackedState
+  max: StrType<u8>,
+  current_state: PackedState,
 }
 impl GraphProgram {
   pub fn new() -> Self {
@@ -82,8 +24,7 @@ impl GraphProgram {
       state_space: None,
       graph: Graph::new(),
       mode: UserMode::AddRemove { selected: None },
-      max: 2,
-      max_str: "2".to_string(),
+      max: StrType::new(2),
       current_state: 0
     }
   }
@@ -112,7 +53,6 @@ impl GraphProgram {
         if let Some(metadata) = state_space.meta.get(&self.current_state) {
           if discriminant(&metadata.classification()) != discriminant(&Classification::Valid) {
             is_good = false;
-
           }
         }
 
@@ -125,9 +65,8 @@ impl GraphProgram {
   }
 
   fn handle_max(&mut self, ui: &mut Ui) {
-    ui.input_text(hash!(), "Max", &mut self.max_str);
-    self.max = self.max_str.parse().unwrap_or(self.max);
-    self.graph.correct_max(self.max);
+    ui.input_text(hash!(), "Max", self.max.string_mut());
+    self.graph.correct_max(self.max.parse());
   }
 
   fn set_mode(&mut self, ui: &mut Ui) {
@@ -157,16 +96,15 @@ impl GraphProgram {
       }
       UserMode::Analyze {
         viewing_type,
-        viewing_idx,
         viewing_length,
-        idx_string,
+        viewing,
         parsed_analysis
       } => {
 
         if self.graph.node_count() == 0 { return }
 
         if self.state_space.is_none() {
-          self.state_space = StateData::new(&mut self.graph, self.max + 1);
+          self.state_space = StateData::new(&mut self.graph, self.max.val() + 1);
         }
         let state_space = self.state_space.as_ref().unwrap();
 
@@ -198,17 +136,17 @@ impl GraphProgram {
         ui.input_text(
           hash!(),
           &format!("/{} Viewed States", focused_states.len()),
-          idx_string
+          viewing.string_mut()
         );
-        *viewing_idx = idx_string.parse().unwrap_or(*viewing_idx);
+        viewing.parse();
 
         if parsed_analysis.is_empty() || old_type != *viewing_type {
-          let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max);
-          *parsed_analysis = parse_analysis(analysis, self.max, self.graph.nodes.len() as u8);
+          let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max.val());
+          *parsed_analysis = parse_analysis(analysis, self.max.val(), self.graph.nodes.len() as u8);
         }
 
         // Load current viewing state
-        if let Some(state) = focused_states.get(viewing_idx.saturating_sub(1)) {
+        if let Some(state) = focused_states.get(viewing.val().saturating_sub(1)) {
           self.graph.load_state(state_space.parse_state(*state));
           self.current_state = *state;
         }
@@ -217,53 +155,48 @@ impl GraphProgram {
 
       },
       UserMode::Bubbles {
-        bubble_idx,
-        bubble_string,
-        state_idx,
-        state_string,
+        bubble,
+        state,
         state_length,
       } => {
         
         if self.graph.node_count() == 0 { return }
 
         if self.state_space.is_none() {
-          self.state_space = StateData::new(&mut self.graph, self.max + 1);
+          self.state_space = StateData::new(&mut self.graph, self.max.val() + 1);
         }
         let state_space = self.state_space.as_ref().unwrap();
 
-        // Identify view idx
+        // Identify bubble
         ui.input_text(
           hash!(),
           &format!("/{} Viewed Bubbles", state_space.bubbles.len()),
-          bubble_string
+          bubble.string_mut()
         );
 
-        let old_bubble_idx = *bubble_idx;
-        *bubble_idx = bubble_string.parse().unwrap_or(*bubble_idx);
-        if *bubble_idx != old_bubble_idx { 
-          *state_idx = 1;
-          *state_string = "1".to_string();
-        }
+        let old_bubble_idx = bubble.val();
+        bubble.parse();
+        if bubble.val() != old_bubble_idx { state.assign(1); }
         
-        let Some(bubble) = state_space.bubbles.get(bubble_idx.saturating_sub(1)) else {
+        let Some(bubble_vec) = state_space.bubbles.get(bubble.val().saturating_sub(1)) else {
           return;
         };
-        *state_length = bubble.len();
+        *state_length = bubble_vec.len();
 
         // Identify view idx
         ui.input_text(
           hash!(),
-          &format!("/{} Viewed States", bubble.len()),
-          state_string
+          &format!("/{} Viewed States", bubble_vec.len()),
+          state.string_mut()
         );
-        *state_idx = state_string.parse().unwrap_or(*state_idx);
+        state.parse();
 
-        if *bubble_idx == state_space.bubbles.len() {
+        if bubble.val() == state_space.bubbles.len() {
           ui.label(Vec2::new(0., 100.), "Bubble of Size 1 Bubbles");
         }
 
         // Load current viewing state
-        if let Some(state) = bubble.get(state_idx.saturating_sub(1)) {
+        if let Some(state) = bubble_vec.get(state.val().saturating_sub(1)) {
           self.graph.load_state(state_space.parse_state(*state));
           self.current_state = *state;
         }
@@ -367,14 +300,14 @@ impl GraphProgram {
         ;
 
         if let Some(node) = hovering && delta != 0 {
-          self.graph.clamped_update(node, delta, self.max);
+          self.graph.clamped_update(node, delta, self.max.val());
         }
 
       },
       UserMode::Set { value, .. } => {
 
         if let Some(node) = hovering 
-          && *value <= self.max 
+          && *value <= self.max.val()
           && is_mouse_button_pressed(MouseButton::Left)
         {
           self.graph.nodes.get_mut(node).unwrap().value = *value;
@@ -382,43 +315,21 @@ impl GraphProgram {
 
       },
       UserMode::Analyze {
-        viewing_idx,
-        idx_string, 
+        viewing,
         viewing_length,
         ..
-      } => {
+      } => { 
 
-        if is_key_pressed(RKeyCode::Left) {
-          if *viewing_idx == 1 { *viewing_idx = *viewing_length; } else {
-            *viewing_idx -= 1;
-          }
-          *idx_string = viewing_idx.to_string();
-        }
-        if is_key_pressed(RKeyCode::Right) {
-          *viewing_idx = (*viewing_idx + 1) % (*viewing_length + 1);
-          if *viewing_idx == 0 { *viewing_idx = 1; }
-          *idx_string = viewing_idx.to_string();
-        }
+        viewing.step_strnum(*viewing_length, 1);
 
       },
       UserMode::Bubbles {
-        state_idx,
-        state_string,
+        state,
         state_length,
         ..
       } => {
 
-        if is_key_pressed(RKeyCode::Left) {
-          if *state_idx == 1 { *state_idx = *state_length; } else {
-            *state_idx -= 1;
-          }
-          *state_string = state_idx.to_string();
-        }
-        if is_key_pressed(RKeyCode::Right) {
-          *state_idx = (*state_idx + 1) % (*state_length + 1);
-          if *state_idx == 0 { *state_idx = 1; }
-          *state_string = state_idx.to_string();
-        }
+        state.step_strnum(*state_length, 1);
 
       }
       _ => {}
@@ -432,8 +343,6 @@ impl GraphProgram {
   }
 
 }
-
-
 
 // Returns a count of how many of each node value each state has
 // Per state, how many nodes have a value
