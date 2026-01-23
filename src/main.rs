@@ -38,6 +38,10 @@ impl GraphProgram {
       // We can only interact with the canvas when we aren't hovering ui
       if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
 
+      if matches!(self.mode, UserMode::Analyze {..}) {
+        self.draw_analysis_window(&mut root_ui());
+      }
+
       self.graph.render(NODE_RADIUS);
       
       next_frame().await
@@ -79,8 +83,7 @@ impl GraphProgram {
     let potential_mode = UserMode::from_int(cur_mode);
     if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
 
-    // If we're changing the structure of the graph, our statespace shifts
-    if discriminant(&self.mode) == discriminant(&UserMode::from_int(0)) {
+    if matches!(&self.mode, UserMode::AddRemove { .. }) {
       self.state_space = None;
       self.current_state = 0;
     } else {
@@ -158,7 +161,6 @@ impl GraphProgram {
           self.current_state = *state;
         }
       
-        self.draw_analysis_window(ui);
 
       },
       UserMode::Bubbles {
