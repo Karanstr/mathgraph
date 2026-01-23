@@ -1,7 +1,6 @@
 use std::str::FromStr;
 use std::ops::{Add, Rem, Sub};
 use macroquad::prelude::*;
-use macroquad::input::KeyCode as RKeyCode;
 
 pub struct StrType<T> where T: FromStr + Clone + ToString {
   string: String,
@@ -37,11 +36,12 @@ where T:
   Add<Output = T> + Sub<Output = T> + Rem<Output = T> 
 {
 
-  pub fn step_strnum(&mut self, max: T, step_size: T) 
+  // I'm not a huge fan of this
+  pub fn step_strnum(&mut self, max: T, step_size: T, increase: KeyCode, decrease: KeyCode) 
   {
-    if is_key_pressed(RKeyCode::Left) {
+    if is_key_pressed(decrease) {
       self.assign( if self.val == step_size { max } else { self.val - step_size } );
-    } else if is_key_pressed(RKeyCode::Right) {
+    } else if is_key_pressed(increase) {
       self.assign((self.val % max) + step_size);
     }
   }
@@ -61,6 +61,7 @@ pub enum UserMode {
   },
   Bubbles {
     bubble: StrType<usize>,
+    bubble_length: usize,
     state: StrType<usize>,
     state_length: usize,
   },
@@ -91,6 +92,7 @@ impl UserMode {
       },
       5 => UserMode::Bubbles {
         bubble: StrType::new(1),
+        bubble_length: 0,
         state: StrType::new(1),
         state_length: 0,
       },

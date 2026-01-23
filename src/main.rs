@@ -2,6 +2,7 @@ mod graph; mod state; mod utilities;
 
 use std::mem::discriminant;
 use macroquad::prelude::*;
+use macroquad::input::KeyCode as RKeyCode;
 use graph::Graph;
 use macroquad::ui::*;
 use num2words::Lang::English;
@@ -32,27 +33,31 @@ impl GraphProgram {
   pub async fn run(mut self) {
     loop {
 
-      widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
-        .label("Settings")
-        .ui(&mut *root_ui(), |ui| 
-      {
-
-        self.handle_max(ui);
-
-        self.set_mode(ui);
-
-        self.handle_mode_ui(ui);
-
-        // We can only interact with the canvas when we aren't hovering ui
-        if !ui.is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
+      self.settings_window();
       
-      });
-
+      // We can only interact with the canvas when we aren't hovering ui
+      if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
 
       self.graph.render(NODE_RADIUS);
       
       next_frame().await
     }
+  }
+
+  fn settings_window(&mut self) {
+    widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
+      .label("Settings")
+      .ui(&mut *root_ui(), |ui| 
+    {
+
+      self.handle_max(ui);
+
+      self.set_mode(ui);
+
+      self.handle_mode_ui(ui);
+
+    
+    });
   }
 
   fn handle_max(&mut self, ui: &mut Ui) {
@@ -158,6 +163,7 @@ impl GraphProgram {
       },
       UserMode::Bubbles {
         bubble,
+        bubble_length,
         state,
         state_length,
       } => {
@@ -174,6 +180,7 @@ impl GraphProgram {
         let old_bubble_idx = bubble.val();
         bubble.parse();
         if bubble.val() != old_bubble_idx { state.assign(1); }
+        *bubble_length = state_space.bubbles.len();
         
         let Some(bubble_vec) = state_space.bubbles.get(bubble.val().saturating_sub(1)) else {
           return;
@@ -331,18 +338,23 @@ impl GraphProgram {
       } => { 
         
         if *viewing_length != 0 {
-          viewing.step_strnum(*viewing_length, 1);
+          viewing.step_strnum(*viewing_length, 1, RKeyCode::Right, RKeyCode::Left);
         }
 
       },
       UserMode::Bubbles {
         state,
         state_length,
-        ..
+        bubble,
+        bubble_length,
       } => {
 
         if *state_length != 0 {
-          state.step_strnum(*state_length, 1);
+          state.step_strnum(*state_length, 1, RKeyCode::Right, RKeyCode::Left);
+        }
+
+        if *bubble_length != 0 {
+          bubble.step_strnum(*bubble_length, 1, RKeyCode::Up, RKeyCode::Down);
         }
 
       }
