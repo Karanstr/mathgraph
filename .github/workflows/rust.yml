@@ -1,0 +1,44 @@
+name: Build Releases
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: graph-explorer
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Rename binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mv target/release/$BIN_NAME \
+             $BIN_NAME-linux-x86_64
+
+      - name: Rename binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          mv target/release/$env:BIN_NAME.exe `
+             $env:BIN_NAME-windows-x86_64.exe
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.BIN_NAME }}-linux-x86_64
+            ${{ env.BIN_NAME }}-windows-x86_64.exe
