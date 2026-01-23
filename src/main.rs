@@ -329,8 +329,10 @@ impl GraphProgram {
         viewing_length,
         ..
       } => { 
-
-        viewing.step_strnum(*viewing_length, 1);
+        
+        if *viewing_length != 0 {
+          viewing.step_strnum(*viewing_length, 1);
+        }
 
       },
       UserMode::Bubbles {
@@ -339,10 +341,11 @@ impl GraphProgram {
         ..
       } => {
 
-        state.step_strnum(*state_length, 1);
+        if *state_length != 0 {
+          state.step_strnum(*state_length, 1);
+        }
 
       }
-      _ => {}
     }
   }
 

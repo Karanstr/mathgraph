@@ -31,7 +31,6 @@ impl<T> StrType<T> where T: FromStr + Clone + ToString {
   pub fn val(&self) -> T { self.val.clone() }
 
 }
-
 impl<T> StrType<T>
 where T: 
   FromStr + Clone + Copy + ToString + Eq +
