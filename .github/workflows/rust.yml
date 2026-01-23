@@ -16,7 +16,7 @@ jobs:
   release:
     strategy:
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
 
@@ -32,7 +32,7 @@ jobs:
           mv target/release/$BIN_NAME \
              $BIN_NAME-linux-x86_64
 
-      - name: Upload Linux binary
+      - name: Upload binary (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v2
         with:
@@ -46,7 +46,7 @@ jobs:
           mv target/release/$env:BIN_NAME.exe `
              $env:BIN_NAME-windows-x86_64.exe
       
-      - name: Upload Windows binary
+      - name: Upload binary (Windows)
         if: matrix.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
