@@ -32,7 +32,7 @@ impl GraphProgram {
   pub async fn run(mut self) {
     loop {
 
-      widgets::Window::new(hash!(), vec2(0., 0.), vec2(250., 150.))
+      widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
         .label("Settings")
         .ui(&mut *root_ui(), |ui| 
       {
@@ -45,20 +45,11 @@ impl GraphProgram {
 
         // We can only interact with the canvas when we aren't hovering ui
         if !ui.is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
-
+      
       });
 
-      let mut is_good = true;
-      if let Some(state_space) = &self.state_space {
-        if let Some(metadata) = state_space.meta.get(&self.current_state) {
-          if discriminant(&metadata.classification()) != discriminant(&Classification::Valid) {
-            is_good = false;
-          }
-        }
 
-      }
-
-      self.graph.render(NODE_RADIUS, is_good);
+      self.graph.render(NODE_RADIUS);
       
       next_frame().await
     }
@@ -82,12 +73,23 @@ impl GraphProgram {
 
     let potential_mode = UserMode::from_int(cur_mode);
     if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
+
+    // If we're changing the structure of the graph, our statespace shifts
+    if discriminant(&self.mode) == discriminant(&UserMode::from_int(0)) {
+      self.state_space = None;
+      self.current_state = 0;
+    } else {
+      if self.state_space.is_none() && self.graph.node_count() != 0 {
+        self.state_space = StateData::new(&mut self.graph, self.max.val() + 1);
+      }
+    }
+
   }
 
   // We're doing extra work here by reloading current state every frame, ideally we could extract
   // this code into an update_graph function, but for now it's not enough for me to care
   fn handle_mode_ui(&mut self, ui: &mut Ui) {
-    match &mut self.mode {
+    'mode_specific: {match &mut self.mode {
       UserMode::Set { value, val_str} => {
 
         ui.input_text(hash!(), "Value", val_str);
@@ -101,12 +103,7 @@ impl GraphProgram {
         parsed_analysis
       } => {
 
-        if self.graph.node_count() == 0 { return }
-
-        if self.state_space.is_none() {
-          self.state_space = StateData::new(&mut self.graph, self.max.val() + 1);
-        }
-        let state_space = self.state_space.as_ref().unwrap();
+        let Some(state_space) = self.state_space.as_ref() else { break 'mode_specific };
 
         let total = (state_space.base as usize).pow(state_space.length as u32);
         ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
@@ -151,7 +148,11 @@ impl GraphProgram {
           self.current_state = *state;
         }
       
+        ui.label(Vec2::new(20., 85.), "AAAAA");
+        
         self.draw_analysis_window(ui);
+
+        ui.label(Vec2::new(20., 85.), "HELLLLLLOOOOOO");
 
       },
       UserMode::Bubbles {
@@ -160,12 +161,7 @@ impl GraphProgram {
         state_length,
       } => {
         
-        if self.graph.node_count() == 0 { return }
-
-        if self.state_space.is_none() {
-          self.state_space = StateData::new(&mut self.graph, self.max.val() + 1);
-        }
-        let state_space = self.state_space.as_ref().unwrap();
+        let Some(state_space) = self.state_space.as_ref() else { break 'mode_specific };
 
         // Identify bubble
         ui.input_text(
@@ -203,12 +199,24 @@ impl GraphProgram {
       
       },
       _ => {}
+    }}
+
+    if let Some(state_space) = &self.state_space {
+      if let Some(metadata) = state_space.meta.get(&self.current_state) {
+        let display = match metadata.classification() {
+          Classification::Valid => { "Valid" },
+          Classification::InvalidT1 => { "Invalid, Theorem 1" },
+          Classification::InvalidOther => { "Invalid, Unknown Theorem" },
+        };
+        ui.label(Vec2::new(0., 85.), display);
+      }
     }
+
   }
 
   fn draw_analysis_window(&self, ui: &mut Ui) {
     if let UserMode::Analyze { parsed_analysis, .. } = &self.mode {
-      widgets::Window::new(hash!(), vec2(0., 150.), vec2(250., 200.))
+      widgets::Window::new(hash!("Analysis"), vec2(0., 150.), vec2(250., 200.))
         .label("Analysis")
         .ui(ui, |ui| 
       {
@@ -241,9 +249,6 @@ impl GraphProgram {
     match &mut self.mode {
       UserMode::AddRemove { selected } => {
 
-        // If we're changing the structure of the graph our statespace shifts.
-        self.state_space = None;
-        self.current_state = 0;
         let mouse_pos = Self::get_mouse_pos();
 
         // Delete hovering on right click
