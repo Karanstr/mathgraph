@@ -96,6 +96,11 @@ impl GraphProgram {
         *value = val_str.parse().unwrap_or(*value);
 
       }
+      UserMode::Play { allow_overflow } => {
+
+        ui.checkbox(hash!(), "Allow Overflow", allow_overflow);
+        
+      }
       UserMode::Analyze {
         viewing_type,
         viewing_length,
@@ -148,11 +153,7 @@ impl GraphProgram {
           self.current_state = *state;
         }
       
-        ui.label(Vec2::new(20., 85.), "AAAAA");
-        
         self.draw_analysis_window(ui);
-
-        ui.label(Vec2::new(20., 85.), "HELLLLLLOOOOOO");
 
       },
       UserMode::Bubbles {
@@ -296,16 +297,20 @@ impl GraphProgram {
         }
 
       },
-      UserMode::Play => {
+      UserMode::Play { allow_overflow } => {
 
         let delta = 
           if is_mouse_button_pressed(MouseButton::Left) { 1 }
           else if is_mouse_button_pressed(MouseButton::Right) { -1 }
           else { 0 } as i8
         ;
-
+        
         if let Some(node) = hovering && delta != 0 {
-          self.graph.clamped_update(node, delta, self.max.val());
+          if *allow_overflow {
+            self.graph.clamped_update(node, delta, self.max.val());
+          } else {
+            self.graph.restricted_update(node, delta, self.max.val());
+          }
         }
 
       },

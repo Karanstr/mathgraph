@@ -1,3 +1,4 @@
+use ahash::AHashMap;
 use macroquad::math::IVec2;
 use lilypads::Pond;
 use macroquad::shapes::*;
@@ -124,6 +125,33 @@ impl Graph {
       let node = self.nodes.get_mut(neighbor).unwrap();
       node.value = node.value.saturating_add_signed(delta).min(max);
     }
+  }
+
+  // I can probably do this better, but for now this works
+  pub fn restricted_update(&mut self, node_idx: usize, delta: i8, max: u8) {
+    let mut new_vals = AHashMap::new();
+    let neighbors = if let Some(node) = self.nodes.get_mut(node_idx) {
+      // No clamping
+      let new_val = node.value.saturating_add_signed(delta).min(max);
+      if new_val == node.value { return }
+      new_vals.insert(node_idx, new_val);
+
+      node.neighbors.clone()
+    } else { return };
+    for neighbor in neighbors {
+      let node = self.nodes.get_mut(neighbor).unwrap();
+      
+      // No clamping
+      let new_val = node.value.saturating_add_signed(delta).min(max);
+      if new_val == node.value { return }
+      new_vals.insert(neighbor, new_val);
+
+    }
+
+    for (idx, val) in new_vals {
+      self.nodes.get_mut(idx).unwrap().value = val;
+    }
+
   }
 
   pub fn contiguize_and_trim(&mut self) {

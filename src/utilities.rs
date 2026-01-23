@@ -52,7 +52,7 @@ where T:
 pub enum UserMode {
   AddRemove { selected: Option<usize> },
   Drag { selected: Option<usize> },
-  Play,
+  Play { allow_overflow: bool },
   Set { value: u8, val_str: String },
   Analyze {
     viewing_type: usize,
@@ -71,7 +71,7 @@ impl UserMode {
     match self {
       Self::AddRemove {..} => 0,
       Self::Drag {..} => 1,
-      Self::Play => 2,
+      Self::Play {..} => 2,
       Self::Set {..} => 3,
       Self::Analyze {..} => 4,
       Self::Bubbles {..} => 5,
@@ -82,23 +82,17 @@ impl UserMode {
     match val {
       0 => UserMode::AddRemove { selected: None },
       1 => UserMode::Drag { selected: None },
-      2 => UserMode::Play,
+      2 => UserMode::Play { allow_overflow: true },
       3 => UserMode::Set { value: 0, val_str: "0".to_string() },
       4 => UserMode::Analyze { 
         viewing_type: 0,
         viewing_length: 0,
         viewing: StrType::new(1),
-        // viewing_idx: 1,
-        // idx_string: "1".to_string(),
         parsed_analysis: Vec::new(),
       },
       5 => UserMode::Bubbles {
         bubble: StrType::new(1),
-        // bubble_idx: 1,
-        // bubble_string: "1".to_string(),
         state: StrType::new(1),
-        // state_idx: 1,
-        // state_string: "1".to_string(),
         state_length: 0,
       },
       _ => unreachable!()
