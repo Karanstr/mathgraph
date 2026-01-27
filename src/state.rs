@@ -4,29 +4,29 @@ use crate::graph::Graph;
 
 pub type PackedState = u128;
 #[derive(Clone, Copy)]
+#[repr(usize)]
 pub enum Classification {
   Valid,
   InvalidT1,
   InvalidOther,
 }
 
-pub struct Metadata {
-  classification: Option<Classification>,
-  bubble: Option<usize>,
+struct Metadata {
+  classification: Option<(Classification, usize)>,
+  bubble: Option<(usize, usize)>,
 }
 impl Metadata {
-  fn set_classification(&mut self, classification: Classification) { self.classification = Some(classification); }
-  fn set_bubble(&mut self, bubble_idx: usize) { self.bubble = Some(bubble_idx); }
-  pub fn classification(&self) -> Classification { self.classification.unwrap() }
-  pub fn bubble(&self) -> usize { self.bubble.unwrap() }
+  fn set_bubble(&mut self, bubble_idx: usize, state_idx: usize) { self.bubble = Some((bubble_idx, state_idx)); }
+  fn classification(&self) -> (Classification, usize) { self.classification.unwrap() }
+  fn bubble(&self) -> (usize, usize) { self.bubble.unwrap() }
 }
 
 pub struct StateData {
-  pub meta: AHashMap<PackedState, Metadata>,
+  meta: AHashMap<PackedState, Metadata>,
   pub bubbles: Vec< Vec<PackedState> >,
-  pub states: [Vec<PackedState>; 3], // One vec per Classification
+  states: [Vec<PackedState>; 3], // One vec per Classification
   pub base: u8,
-  pub neighbors: Vec< Vec<usize> >
+  neighbors: Vec< Vec<usize> >
 }
 impl StateData {
   pub fn new(graph: &mut Graph, max: u8) -> Option<Self> {
@@ -62,12 +62,13 @@ impl StateData {
 
   fn track_unique_state(&mut self, state: PackedState, classification: Classification) -> bool {
     if self.meta.contains_key(&state) { return false; }
+    let state_vec = &mut self.states[classification as usize];
     let metadata = Metadata {
-      classification: Some(classification),
+      classification: Some((classification, state_vec.len())),
       bubble: None
     };
     self.meta.insert(state.clone(), metadata);
-    self.states[classification as usize].push(state);
+    state_vec.push(state);
     true
   }
 
@@ -79,6 +80,19 @@ impl StateData {
 
   pub fn parse_vec(&self, vec: Vec<u8>) -> PackedState {
     StateOps::from_vec(vec, self.base)
+  }
+
+  pub fn set_packed(&self, state: PackedState, idx: usize, value: u8) -> PackedState {
+    StateOps::set(state, idx, value, self.base, self.length())
+  }
+
+  pub fn classification_data(&self, state: PackedState) -> (Classification, usize) {
+    self.meta.get(&state).unwrap().classification()
+  }
+
+  /// Returns (bubble_idx, state_idx)
+  pub fn bubble_data(&self, state: PackedState) -> (usize, usize) {
+    self.meta.get(&state).unwrap().bubble()
   }
 
 }
@@ -159,14 +173,15 @@ impl StateData {
       self.bubbles.push(bubble_vec);
     }
 
-    for (idx, bubble) in self.bubbles.iter().enumerate() {
-      for state in bubble {
-        self.meta.get_mut(&state).unwrap().set_bubble(idx);
+    for (bubble_vec, bubble) in self.bubbles.iter().enumerate() {
+      for (bubble_idx, state) in bubble.iter().enumerate() {
+        self.meta.get_mut(state).unwrap().set_bubble(bubble_vec, bubble_idx);
       }
     }
 
+    let single_bubbles = self.bubbles.len();
     for (idx, state) in smol_bubbles.iter().enumerate() {
-      self.meta.get_mut(&state).unwrap().set_bubble(idx);
+      self.meta.get_mut(state).unwrap().set_bubble(single_bubbles, idx);
     }
     self.bubbles.push(smol_bubbles);
   
@@ -207,10 +222,6 @@ impl StateData {
       state = StateOps::set(state, *idx, new_node, self.base, self.length());
     }
     Some(state)
-  }
-
-  pub fn set_packed(&self, state: PackedState, idx: usize, value: u8) -> PackedState {
-    StateOps::set(state, idx, value, self.base, self.length())
   }
 
 }
@@ -326,3 +337,4 @@ pub fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedStat
   out.extend_from_slice(b);
   out
 }
+

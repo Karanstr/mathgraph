@@ -79,12 +79,10 @@ impl GraphProgram {
     if old_max == self.max.parse() { return; }
     
     self.graph.correct_max(self.max.val());
-    if self.state_space.is_some() {
-      self.state_space = StateData::new(&mut self.graph, self.max.val());
-      if let Some(state_space) = &self.state_space {
-        self.loaded_state = state_space.parse_vec(self.graph.export_state());
-        self.desired_state = self.loaded_state;
-      }
+    if let Some(state_space) = &mut self.state_space {
+      *state_space = StateData::new(&mut self.graph, self.max.val()).unwrap();
+      self.loaded_state = state_space.parse_vec(self.graph.export_state());
+      self.desired_state = self.loaded_state;
     }
   }
 
@@ -100,21 +98,53 @@ impl GraphProgram {
     ], &mut new_mode);
 
     let potential_mode = UserMode::from_int(new_mode);
-    if discriminant(&self.mode) != discriminant(&potential_mode) { 
-      self.mode = potential_mode
-    };
+    if discriminant(&self.mode) == discriminant(&potential_mode) { return }
 
-    if matches!(&self.mode, UserMode::AddRemove { .. }) {
-      self.state_space = None;
-    } else {
-      if self.state_space.is_none() && self.graph.node_count() != 0 {
-        self.state_space = StateData::new(&mut self.graph, self.max.val());
-        if let Some(state_space) = &self.state_space {
-          self.loaded_state = state_space.parse_vec(self.graph.export_state());
-          self.desired_state = self.loaded_state;
-        }
+    self.mode = potential_mode;
+
+    if !matches!(&self.mode, UserMode::AddRemove { .. }) && self.state_space.is_none() {
+      self.state_space = StateData::new(&mut self.graph, self.max.val());
+     
+      if let Some(state_space) = &self.state_space {
+        self.loaded_state = state_space.parse_vec(self.graph.export_state());
+        self.desired_state = self.loaded_state;
       }
     }
+
+    'mode:{ match &mut self.mode {
+      UserMode::AddRemove { .. } => {
+
+        self.state_space = None;
+
+      }
+      UserMode::Analyze { 
+        viewing_type,
+        viewing,
+        ..
+      } => {
+
+        let Some(state_space) = &self.state_space else { break 'mode };
+        let (classification, idx) = state_space.classification_data(self.loaded_state);
+        *viewing_type = classification as usize;
+        // Wow I hate that I did this off by one nonsense
+        viewing.assign(idx + 1);
+ 
+      }
+      UserMode::Bubbles {
+        bubble,
+        state,
+        ..
+      } => {
+
+        let Some(state_space) = &self.state_space else { break 'mode };
+        let (bubble_idx, state_idx) = state_space.bubble_data(self.loaded_state);
+        // Wow I hate that I did this off by one nonsense
+        bubble.assign(bubble_idx + 1);
+        state.assign(state_idx + 1);
+
+      }
+      _ => { }
+    }}
 
   }
 
@@ -230,14 +260,12 @@ impl GraphProgram {
     }}
 
     if let Some(state_space) = &self.state_space {
-      if let Some(metadata) = state_space.meta.get(&self.loaded_state) {
-        let display = match metadata.classification() {
-          Classification::Valid => { "Valid" },
-          Classification::InvalidT1 => { "Invalid, Theorem 1" },
-          Classification::InvalidOther => { "Invalid, Unknown Theorem" },
-        };
-        ui.label(Vec2::new(0., 85.), display);
-      }
+      let display = match state_space.classification_data(self.loaded_state).0 {
+        Classification::Valid => { "Valid" },
+        Classification::InvalidT1 => { "Invalid, Theorem 1" },
+        Classification::InvalidOther => { "Invalid, Unknown Theorem" },
+      };
+      ui.label(Vec2::new(0., 85.), display);
     }
 
   }
@@ -359,11 +387,19 @@ impl GraphProgram {
       UserMode::Analyze {
         viewing,
         viewing_length,
+        viewing_type,
         ..
       } => { 
         
         if *viewing_length != 0 {
           viewing.step_strnum(*viewing_length, 1, RKeyCode::Right, RKeyCode::Left);
+        }
+
+        if is_key_pressed(RKeyCode::Up) {
+          *viewing_type = if *viewing_type == 0 { 3 } else { *viewing_type - 1 };
+        }
+        if is_key_pressed(RKeyCode::Down) {
+          *viewing_type = (*viewing_type + 1) % 4;
         }
 
       },

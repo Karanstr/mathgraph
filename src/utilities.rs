@@ -85,7 +85,7 @@ impl<T> StrType<T> where T: FromStr + Clone + ToString {
 }
 impl<T> StrType<T>
 where T: 
-  FromStr + Clone + Copy + ToString + Eq +
+  FromStr + Clone + Copy + ToString + Eq + Ord +
   Add<Output = T> + Sub<Output = T> + Rem<Output = T> 
 {
 
@@ -93,7 +93,12 @@ where T:
   pub fn step_strnum(&mut self, max: T, step_size: T, increase: KeyCode, decrease: KeyCode) 
   {
     if is_key_pressed(decrease) {
-      self.assign( if self.val == step_size { max } else { self.val - step_size } );
+      let new_val = 
+        if self.val == step_size { max }
+        else if self.val > max { max }
+        else { self.val - step_size }
+      ;
+      self.assign(new_val);
     } else if is_key_pressed(increase) {
       self.assign((self.val % max) + step_size);
     }
