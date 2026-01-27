@@ -12,8 +12,6 @@ env:
   CARGO_TERM_COLOR: always
   BIN_NAME: graph-explorer
 
-# Yes I'm aware this doesn't work and only produces windows binaries
-# No I don't care enough to fix it right now.
 jobs:
   release:
     strategy:
