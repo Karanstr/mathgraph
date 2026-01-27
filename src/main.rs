@@ -17,6 +17,7 @@ struct GraphProgram {
   state_space: Option<StateData>,
   mode: UserMode,
   max: StrType<u8>,
+  graph_changed: bool,
 
   loaded_state: PackedState,
   desired_state: PackedState,
@@ -32,6 +33,14 @@ impl GraphProgram {
       desired_state: 0,
     }
   }
+  
+  fn get_mouse_pos() -> IVec2 { Vec2::from(mouse_position()).as_ivec2() }
+
+  fn get_hovering(&self) -> Option<usize> {
+    self.graph.node_at(Self::get_mouse_pos(), NODE_RADIUS)
+  }
+}
+impl GraphProgram {
 
   pub async fn run(mut self) { loop {
 
@@ -42,18 +51,20 @@ impl GraphProgram {
     {
       self.graph.load_state(state_space.parse_state(self.desired_state));
       self.loaded_state = self.desired_state;
+      self.graph_changed = true;
     }
 
     // We can only interact with the canvas when we aren't hovering ui
     if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
 
-    if matches!(self.mode, UserMode::Analyze {..}) {
-      self.draw_analysis_window(&mut root_ui());
-    }
+    if matches!(self.mode, UserMode::Analyze {..}) { self.draw_analysis_window(&mut root_ui()); }
 
-    self.graph.render(NODE_RADIUS, RED);
+    if self.graph_changed { self.color_nodes(); }
+    self.graph_changed = false;
+    self.graph.render(NODE_RADIUS);
     
     next_frame().await
+
   } }
 
   fn settings_window(&mut self) {
@@ -84,6 +95,7 @@ impl GraphProgram {
       self.loaded_state = state_space.parse_vec(self.graph.export_state());
       self.desired_state = self.loaded_state;
     }
+    self.graph_changed = true;
   }
 
   fn set_mode(&mut self, ui: &mut Ui) {
@@ -270,33 +282,6 @@ impl GraphProgram {
 
   }
 
-  fn draw_analysis_window(&self, ui: &mut Ui) {
-    if let UserMode::Analyze { parsed_analysis, .. } = &self.mode {
-      widgets::Window::new(hash!("Analysis"), vec2(0., 150.), vec2(250., 200.))
-        .label("Analysis")
-        .ui(ui, |ui| 
-      {
-        let mut y = 0.;
-
-        for (value, values) in parsed_analysis.iter().enumerate() {
-          for (node_count, state_count) in values.iter().enumerate() {
-            ui.label(Vec2::new(0., y),
-              &format!
-              (
-                "{state_count} {} {} {value}{}",
-                if *state_count == 1 {"state has"} else {"states have"},
-                Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
-                if node_count == 1 { "" } else {"s"}
-              )
-            );
-
-            y += 10.;
-          }
-        }
-
-      });
-    }
-  }
 
   fn handle_interactions(&mut self) {
     // Silly borrow issue
@@ -311,6 +296,7 @@ impl GraphProgram {
         if is_mouse_button_down(MouseButton::Right) {
           if let Some(remove) = hovering { 
             self.graph.remove(remove);
+            self.graph_changed = true;
           }
         }
 
@@ -320,6 +306,7 @@ impl GraphProgram {
           // Or we create a node
           if selected.is_none() {
             *selected = Some(self.graph.add_node(mouse_pos));
+            self.graph_changed = true;
           }
           // Or do nothing if we're not touching it but too close to make one??
         }
@@ -337,6 +324,7 @@ impl GraphProgram {
         if is_mouse_button_released(MouseButton::Left) {
           if let Some(node1) = *selected && let Some(node2) = hovering && node1 != node2 {
             self.graph.attempt_unique_connection(node1, node2);
+            self.graph_changed = true;
           }
           *selected = None;
         }
@@ -420,12 +408,41 @@ impl GraphProgram {
 
       }
     }
+
   }
 
-  fn get_mouse_pos() -> IVec2 { Vec2::from(mouse_position()).as_ivec2() }
 
-  fn get_hovering(&self) -> Option<usize> {
-    self.graph.node_at(Self::get_mouse_pos(), NODE_RADIUS)
+  fn color_nodes(&mut self) {
+
+  }
+
+
+  fn draw_analysis_window(&self, ui: &mut Ui) {
+    if let UserMode::Analyze { parsed_analysis, .. } = &self.mode {
+      widgets::Window::new(hash!("Analysis"), vec2(0., 150.), vec2(250., 200.))
+        .label("Analysis")
+        .ui(ui, |ui| 
+      {
+        let mut y = 0.;
+
+        for (value, values) in parsed_analysis.iter().enumerate() {
+          for (node_count, state_count) in values.iter().enumerate() {
+            ui.label(Vec2::new(0., y),
+              &format!
+              (
+                "{state_count} {} {} {value}{}",
+                if *state_count == 1 {"state has"} else {"states have"},
+                Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
+                if node_count == 1 { "" } else {"s"}
+              )
+            );
+
+            y += 10.;
+          }
+        }
+
+      });
+    }
   }
 
 }

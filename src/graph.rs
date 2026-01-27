@@ -14,8 +14,6 @@ impl Graph {
     self.nodes.insert(Node::new(position))
   }
 
-  pub fn node_count(&self) -> usize { self.nodes.iter().count() }
-
   /// Adds neighbors if not neighbors already, otherwise does nothing
   pub fn attempt_unique_connection(&mut self, node1: usize, node2: usize) -> bool {
     if self.nodes.is_occupied(node1) && self.nodes.is_occupied(node2) {
@@ -58,24 +56,21 @@ impl Graph {
     None
   }
 
-  pub fn render(&self, radius: f32, color: Color) {
-    let mut circles: Vec<(IVec2, u8)> = Vec::new();
-    for node in self.nodes.safe_data() {
-      if let Some(node) = node {
-        circles.push((node.position, node.value));
-        for neighbor in &node.neighbors {
-          let other_node = self.nodes.get(*neighbor).unwrap();
-          draw_line(
-            node.position.x as f32, node.position.y as f32,
-            other_node.position.x as f32, other_node.position.y as f32,
-            4., WHITE
-          );
-        }
+  pub fn render(&self, radius: f32) {
+    let mut circles: Vec<(IVec2, u8, Color)> = Vec::new();
+    for (_, node) in self.nodes.iter() {
+      circles.push((node.position, node.value, node.color));
+      for neighbor in &node.neighbors {
+        let other_node = self.nodes.get(*neighbor).unwrap();
+        draw_line(
+          node.position.x as f32, node.position.y as f32,
+          other_node.position.x as f32, other_node.position.y as f32,
+          4., WHITE
+        );
       }
     }
     
-    let font_size = radius;
-    for (pos, value) in circles {
+    for (pos, value, color) in circles {
       draw_circle(
         pos.x as f32,
         pos.y as f32,
@@ -83,9 +78,9 @@ impl Graph {
       );
       draw_text(
         &format!("{value}"),
-        pos.x as f32 - font_size/4. * (1 + value.max(1).ilog10()) as f32,
-        pos.y as f32 + font_size/4.,
-        font_size, WHITE
+        pos.x as f32 - radius/4. * (1 + value.max(1).ilog10()) as f32,
+        pos.y as f32 + radius/4.,
+        radius, WHITE
       );
     }
   }
@@ -126,7 +121,8 @@ impl Graph {
 pub struct Node {
   pub position: IVec2,
   pub neighbors: Vec<usize>,
-  pub value: u8
+  pub value: u8,
+  pub color: Color,
 }
 impl Node {
   pub fn new(position: IVec2) -> Self {
@@ -134,6 +130,7 @@ impl Node {
       position,
       neighbors: Vec::with_capacity(0),
       value: 0,
+      color: RED,
     }
   }
 
