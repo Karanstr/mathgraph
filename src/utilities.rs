@@ -2,6 +2,59 @@ use std::str::FromStr;
 use std::ops::{Add, Rem, Sub};
 use macroquad::prelude::*;
 
+pub enum UserMode {
+  AddRemove { selected: Option<usize> },
+  Drag { selected: Option<usize> },
+  Play { allow_clamping: bool },
+  Set { value: StrType<u8> },
+  Analyze {
+    viewing_type: usize,
+    viewing_length: usize,
+    viewing: StrType<usize>,
+    parsed_analysis: Vec<Vec<u32>>,
+  },
+  Bubbles {
+    bubble: StrType<usize>,
+    bubble_length: usize,
+    state: StrType<usize>,
+    state_length: usize,
+  },
+}
+impl UserMode {
+  pub fn as_int(&self) -> usize {
+    match self {
+      Self::AddRemove {..} => 0,
+      Self::Drag {..} => 1,
+      Self::Play {..} => 2,
+      Self::Set {..} => 3,
+      Self::Analyze {..} => 4,
+      Self::Bubbles {..} => 5,
+    }
+  }
+
+  pub fn from_int(val: usize) -> Self {
+    match val {
+      0 => UserMode::AddRemove { selected: None },
+      1 => UserMode::Drag { selected: None },
+      2 => UserMode::Play { allow_clamping: true },
+      3 => UserMode::Set { value: StrType::new(0) },
+      4 => UserMode::Analyze { 
+        viewing_type: 0,
+        viewing_length: 0,
+        viewing: StrType::new(1),
+        parsed_analysis: Vec::new(),
+      },
+      5 => UserMode::Bubbles {
+        bubble: StrType::new(1),
+        bubble_length: 0,
+        state: StrType::new(1),
+        state_length: 0,
+      },
+      _ => unreachable!()
+    }
+  }
+}
+
 pub struct StrType<T> where T: FromStr + Clone + ToString {
   string: String,
   val: T,
@@ -46,57 +99,4 @@ where T:
     }
   }
 
-}
-
-pub enum UserMode {
-  AddRemove { selected: Option<usize> },
-  Drag { selected: Option<usize> },
-  Play { allow_overflow: bool },
-  Set { value: u8, val_str: String },
-  Analyze {
-    viewing_type: usize,
-    viewing_length: usize,
-    viewing: StrType<usize>,
-    parsed_analysis: Vec<Vec<u32>>,
-  },
-  Bubbles {
-    bubble: StrType<usize>,
-    bubble_length: usize,
-    state: StrType<usize>,
-    state_length: usize,
-  },
-}
-impl UserMode {
-  pub fn as_int(&self) -> usize {
-    match self {
-      Self::AddRemove {..} => 0,
-      Self::Drag {..} => 1,
-      Self::Play {..} => 2,
-      Self::Set {..} => 3,
-      Self::Analyze {..} => 4,
-      Self::Bubbles {..} => 5,
-    }
-  }
-
-  pub fn from_int(val: usize) -> Self {
-    match val {
-      0 => UserMode::AddRemove { selected: None },
-      1 => UserMode::Drag { selected: None },
-      2 => UserMode::Play { allow_overflow: true },
-      3 => UserMode::Set { value: 0, val_str: "0".to_string() },
-      4 => UserMode::Analyze { 
-        viewing_type: 0,
-        viewing_length: 0,
-        viewing: StrType::new(1),
-        parsed_analysis: Vec::new(),
-      },
-      5 => UserMode::Bubbles {
-        bubble: StrType::new(1),
-        bubble_length: 0,
-        state: StrType::new(1),
-        state_length: 0,
-      },
-      _ => unreachable!()
-    }
-  }
 }

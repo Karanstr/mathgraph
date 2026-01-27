@@ -1,37 +1,12 @@
-use ahash::AHashMap;
 use macroquad::math::IVec2;
 use lilypads::Pond;
 use macroquad::shapes::*;
 use macroquad::color::*;
 use macroquad::text::draw_text;
 
-#[derive(Debug)]
-pub struct Node {
-  pub position: IVec2,
-  pub neighbors: Vec<usize>,
-  pub value: u8
-}
-impl Node {
-  pub fn new(position: IVec2) -> Self {
-    Self {
-      position,
-      neighbors: Vec::with_capacity(0),
-      value: 0,
-    }
-  }
-
-  pub fn add_unique_neighbor(&mut self, neighbor: usize) {
-    if !self.neighbors.contains(&neighbor) {
-      self.neighbors.push(neighbor);
-    }
-  }
-
-}
-
 pub struct Graph { 
   pub nodes: Pond<Node>,
 }
-// Boring management stuff
 impl Graph {
   pub fn new() -> Self { Self { nodes: Pond::new() } }
   
@@ -56,6 +31,15 @@ impl Graph {
     }
   }
 
+  /// Assumes the graph is contiguized, if it isn't this might spit out nonsense
+  pub fn export_state(&self) -> Vec<u8> {
+    let mut output = vec![0; self.nodes.len()];
+    for (idx, node) in self.nodes.iter() {
+      output[idx] = node.value;
+    }
+    output
+  }
+
   pub fn remove(&mut self, removed: usize) {
     let removed_node = self.nodes.free(removed).unwrap();
     for neighbor in removed_node.neighbors {
@@ -74,7 +58,7 @@ impl Graph {
     None
   }
 
-  pub fn render(&self, radius: f32) {
+  pub fn render(&self, radius: f32, color: Color) {
     let mut circles: Vec<(IVec2, u8)> = Vec::new();
     for node in self.nodes.safe_data() {
       if let Some(node) = node {
@@ -95,7 +79,7 @@ impl Graph {
       draw_circle(
         pos.x as f32,
         pos.y as f32,
-        radius, RED
+        radius, color
       );
       draw_text(
         &format!("{value}"),
@@ -107,51 +91,12 @@ impl Graph {
   }
 
 }
-
 impl Graph {
 
   pub fn correct_max(&mut self, max: u8) {
     for (_, node) in self.nodes.iter_mut() {
       node.value = node.value.min(max);
     }
-  }
-
-  pub fn clamped_update(&mut self, node_idx: usize, delta: i8, max: u8) {
-    let neighbors = if let Some(node) = self.nodes.get_mut(node_idx) {
-      node.value = node.value.saturating_add_signed(delta).min(max);
-      node.neighbors.clone()
-    } else { return };
-    for neighbor in neighbors {
-      let node = self.nodes.get_mut(neighbor).unwrap();
-      node.value = node.value.saturating_add_signed(delta).min(max);
-    }
-  }
-
-  // I can probably do this better, but for now this works
-  pub fn restricted_update(&mut self, node_idx: usize, delta: i8, max: u8) {
-    let mut new_vals = AHashMap::new();
-    let neighbors = if let Some(node) = self.nodes.get_mut(node_idx) {
-      // No clamping
-      let new_val = node.value.saturating_add_signed(delta).min(max);
-      if new_val == node.value { return }
-      new_vals.insert(node_idx, new_val);
-
-      node.neighbors.clone()
-    } else { return };
-    for neighbor in neighbors {
-      let node = self.nodes.get_mut(neighbor).unwrap();
-      
-      // No clamping
-      let new_val = node.value.saturating_add_signed(delta).min(max);
-      if new_val == node.value { return }
-      new_vals.insert(neighbor, new_val);
-
-    }
-
-    for (idx, val) in new_vals {
-      self.nodes.get_mut(idx).unwrap().value = val;
-    }
-
   }
 
   pub fn contiguize_and_trim(&mut self) {
@@ -173,6 +118,29 @@ impl Graph {
       neigbors.push(node.neighbors.clone());
     }
     neigbors
+  }
+
+}
+
+#[derive(Debug)]
+pub struct Node {
+  pub position: IVec2,
+  pub neighbors: Vec<usize>,
+  pub value: u8
+}
+impl Node {
+  pub fn new(position: IVec2) -> Self {
+    Self {
+      position,
+      neighbors: Vec::with_capacity(0),
+      value: 0,
+    }
+  }
+
+  pub fn add_unique_neighbor(&mut self, neighbor: usize) {
+    if !self.neighbors.contains(&neighbor) {
+      self.neighbors.push(neighbor);
+    }
   }
 
 }

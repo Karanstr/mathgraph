@@ -13,11 +13,13 @@ use utilities::*;
 const NODE_RADIUS: f32 = 40.;
 
 struct GraphProgram {
-  state_space: Option<StateData>,
   graph: Graph,
+  state_space: Option<StateData>,
   mode: UserMode,
   max: StrType<u8>,
-  current_state: PackedState,
+
+  loaded_state: PackedState,
+  desired_state: PackedState,
 }
 impl GraphProgram {
   pub fn new() -> Self {
@@ -26,27 +28,33 @@ impl GraphProgram {
       graph: Graph::new(),
       mode: UserMode::AddRemove { selected: None },
       max: StrType::new(2),
-      current_state: 0
+      loaded_state: 0,
+      desired_state: 0,
     }
   }
 
-  pub async fn run(mut self) {
-    loop {
+  pub async fn run(mut self) { loop {
 
-      self.settings_window();
-      
-      // We can only interact with the canvas when we aren't hovering ui
-      if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
-
-      if matches!(self.mode, UserMode::Analyze {..}) {
-        self.draw_analysis_window(&mut root_ui());
-      }
-
-      self.graph.render(NODE_RADIUS);
-      
-      next_frame().await
+    self.settings_window();
+    
+    if self.desired_state != self.loaded_state
+      && let Some(state_space) = &self.state_space
+    {
+      self.graph.load_state(state_space.parse_state(self.desired_state));
+      self.loaded_state = self.desired_state;
     }
-  }
+
+    // We can only interact with the canvas when we aren't hovering ui
+    if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
+
+    if matches!(self.mode, UserMode::Analyze {..}) {
+      self.draw_analysis_window(&mut root_ui());
+    }
+
+    self.graph.render(NODE_RADIUS, RED);
+    
+    next_frame().await
+  } }
 
   fn settings_window(&mut self) {
     widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
@@ -59,18 +67,29 @@ impl GraphProgram {
       self.set_mode(ui);
 
       self.handle_mode_ui(ui);
-
     
     });
   }
 
+  // I don't like directly touching the graph like this, but if I don't then max can't be changed
+  // during add/remove (or I need edgecases)
   fn handle_max(&mut self, ui: &mut Ui) {
     ui.input_text(hash!(), "Max", self.max.string_mut());
-    self.graph.correct_max(self.max.parse());
+    let old_max = self.max.val();
+    if old_max == self.max.parse() { return; }
+    
+    self.graph.correct_max(self.max.val());
+    if self.state_space.is_some() {
+      self.state_space = StateData::new(&mut self.graph, self.max.val());
+      if let Some(state_space) = &self.state_space {
+        self.loaded_state = state_space.parse_vec(self.graph.export_state());
+        self.desired_state = self.loaded_state;
+      }
+    }
   }
 
   fn set_mode(&mut self, ui: &mut Ui) {
-    let mut cur_mode = self.mode.as_int();
+    let mut new_mode = self.mode.as_int();
     ui.combo_box(hash!(), "Mode", &[
       "Add/Remove",
       "Drag",
@@ -78,35 +97,38 @@ impl GraphProgram {
       "Set",
       "Analyze",
       "Bubbles",
-    ], &mut cur_mode);
+    ], &mut new_mode);
 
-    let potential_mode = UserMode::from_int(cur_mode);
-    if discriminant(&self.mode) != discriminant(&potential_mode) { self.mode = potential_mode };
+    let potential_mode = UserMode::from_int(new_mode);
+    if discriminant(&self.mode) != discriminant(&potential_mode) { 
+      self.mode = potential_mode
+    };
 
     if matches!(&self.mode, UserMode::AddRemove { .. }) {
       self.state_space = None;
-      self.current_state = 0;
     } else {
       if self.state_space.is_none() && self.graph.node_count() != 0 {
-        self.state_space = StateData::new(&mut self.graph, self.max.val() + 1);
+        self.state_space = StateData::new(&mut self.graph, self.max.val());
+        if let Some(state_space) = &self.state_space {
+          self.loaded_state = state_space.parse_vec(self.graph.export_state());
+          self.desired_state = self.loaded_state;
+        }
       }
     }
 
   }
 
-  // We're doing extra work here by reloading current state every frame, ideally we could extract
-  // this code into an update_graph function, but for now it's not enough for me to care
   fn handle_mode_ui(&mut self, ui: &mut Ui) {
-    'mode_specific: {match &mut self.mode {
-      UserMode::Set { value, val_str} => {
+    'mode: {match &mut self.mode {
+      UserMode::Set { value} => {
 
-        ui.input_text(hash!(), "Value", val_str);
-        *value = val_str.parse().unwrap_or(*value);
+        ui.input_text(hash!(), "Value", value.string_mut());
+        value.parse();
 
       }
-      UserMode::Play { allow_overflow } => {
+      UserMode::Play { allow_clamping} => {
 
-        ui.checkbox(hash!(), "Allow Overflow", allow_overflow);
+        ui.checkbox(hash!(), "Allow Clamping", allow_clamping);
         
       }
       UserMode::Analyze {
@@ -116,9 +138,9 @@ impl GraphProgram {
         parsed_analysis
       } => {
 
-        let Some(state_space) = self.state_space.as_ref() else { break 'mode_specific };
+        let Some(state_space) = self.state_space.as_ref() else { break 'mode };
 
-        let total = (state_space.base as usize).pow(state_space.length as u32);
+        let total = (state_space.base as usize).pow(state_space.length() as u32);
         ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
 
         // Identify view type
@@ -151,16 +173,14 @@ impl GraphProgram {
         viewing.parse();
 
         if parsed_analysis.is_empty() || old_type != *viewing_type {
-          let analysis = frequency_analysis(focused_states, self.graph.node_count(), self.max.val());
+          let analysis = frequency_analysis(focused_states, self.graph.nodes.len(), self.max.val());
           *parsed_analysis = parse_analysis(analysis, self.max.val(), self.graph.nodes.len() as u8);
         }
 
         // Load current viewing state
         if let Some(state) = focused_states.get(viewing.val().saturating_sub(1)) {
-          self.graph.load_state(state_space.parse_state(*state));
-          self.current_state = *state;
+          self.desired_state = *state;
         }
-      
 
       },
       UserMode::Bubbles {
@@ -170,22 +190,21 @@ impl GraphProgram {
         state_length,
       } => {
         
-        let Some(state_space) = self.state_space.as_ref() else { break 'mode_specific };
+        let Some(state_space) = self.state_space.as_ref() else { break 'mode };
 
+        let old_bubble_idx = bubble.val();
         // Identify bubble
         ui.input_text(
           hash!(),
           &format!("/{} Viewed Bubbles", state_space.bubbles.len()),
           bubble.string_mut()
         );
-
-        let old_bubble_idx = bubble.val();
         bubble.parse();
         if bubble.val() != old_bubble_idx { state.assign(1); }
         *bubble_length = state_space.bubbles.len();
         
         let Some(bubble_vec) = state_space.bubbles.get(bubble.val().saturating_sub(1)) else {
-          return;
+          break 'mode;
         };
         *state_length = bubble_vec.len();
 
@@ -203,8 +222,7 @@ impl GraphProgram {
 
         // Load current viewing state
         if let Some(state) = bubble_vec.get(state.val().saturating_sub(1)) {
-          self.graph.load_state(state_space.parse_state(*state));
-          self.current_state = *state;
+          self.desired_state = *state;
         }
       
       },
@@ -212,7 +230,7 @@ impl GraphProgram {
     }}
 
     if let Some(state_space) = &self.state_space {
-      if let Some(metadata) = state_space.meta.get(&self.current_state) {
+      if let Some(metadata) = state_space.meta.get(&self.loaded_state) {
         let display = match metadata.classification() {
           Classification::Valid => { "Valid" },
           Classification::InvalidT1 => { "Invalid, Theorem 1" },
@@ -306,30 +324,35 @@ impl GraphProgram {
         }
 
       },
-      UserMode::Play { allow_overflow } => {
+      UserMode::Play { allow_clamping } => {
 
         let delta = 
           if is_mouse_button_pressed(MouseButton::Left) { 1 }
           else if is_mouse_button_pressed(MouseButton::Right) { -1 }
-          else { 0 } as i8
+          else { return } as i8
         ;
         
-        if let Some(node) = hovering && delta != 0 {
-          if *allow_overflow {
-            self.graph.clamped_update(node, delta, self.max.val());
-          } else {
-            self.graph.restricted_update(node, delta, self.max.val());
-          }
+        if   let Some(node) = hovering
+          && let Some(state_space) = &self.state_space
+          && let Some(state) = state_space.splash_state(
+            self.loaded_state,
+            node,
+            delta,
+            *allow_clamping
+          )
+        {
+          self.desired_state = state;
         }
 
       },
       UserMode::Set { value, .. } => {
 
         if let Some(node) = hovering 
-          && *value <= self.max.val()
+          && value.val() <= self.max.val()
           && is_mouse_button_pressed(MouseButton::Left)
+          && let Some(state_space) = &self.state_space
         {
-          self.graph.nodes.get_mut(node).unwrap().value = *value;
+          self.desired_state = state_space.set_packed(self.loaded_state, node, value.val());
         }
 
       },
@@ -369,37 +392,6 @@ impl GraphProgram {
     self.graph.node_at(Self::get_mouse_pos(), NODE_RADIUS)
   }
 
-}
-
-// Returns a count of how many of each node value each state has
-// Per state, how many nodes have a value
-// result[state][value] = node_count
-fn frequency_analysis(states: &Vec<PackedState>, length: usize, max: u8) -> Vec<Vec<u32>> {
-  if states.is_empty() { return Vec::new() }
-  let mut result = Vec::new();
-  let base = max as usize + 1;
-  for state in states {
-    let mut count = vec![0; base];
-    for idx in 0 .. length { 
-      count[StateOps::get(*state, idx, base as u8, length) as usize] += 1;
-    }
-    result.push(count);
-  }
-  result
-}
-
-// How many states have 3 nodes with value 1, etc
-// result[value][node_count] = state_count
-fn parse_analysis(analysis: Vec<Vec<u32>>, max: u8, node_count: u8) -> Vec<Vec<u32>> {
-  if analysis.is_empty() { return Vec::new(); }
-  let mut result = vec![vec![0; node_count as usize + 1]; max as usize + 1];
-
-  for state in analysis {
-    for (value, node_count) in state.iter().enumerate() {
-      result[value][*node_count as usize] += 1; 
-    }
-  }
-  result
 }
 
 #[macroquad::main("Graph Visualizer")]
