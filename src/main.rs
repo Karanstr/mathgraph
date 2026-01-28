@@ -29,6 +29,8 @@ impl GraphProgram {
       graph: Graph::new(),
       mode: UserMode::AddRemove { selected: None },
       max: StrType::new(2),
+      graph_changed: false,
+
       loaded_state: 0,
       desired_state: 0,
     }
@@ -120,6 +122,7 @@ impl GraphProgram {
       if let Some(state_space) = &self.state_space {
         self.loaded_state = state_space.parse_vec(self.graph.export_state());
         self.desired_state = self.loaded_state;
+        self.graph_changed = true;
       }
     }
 
@@ -127,6 +130,7 @@ impl GraphProgram {
       UserMode::AddRemove { .. } => {
 
         self.state_space = None;
+        self.graph_changed = true;
 
       }
       UserMode::Analyze { 
@@ -413,6 +417,22 @@ impl GraphProgram {
 
 
   fn color_nodes(&mut self) {
+
+    if let Some(state_space) = &self.state_space {
+      for (idx, node) in self.graph.nodes.iter_mut() {
+        let (has_zero, has_max) = state_space.neighborhood_zero_or_max(self.loaded_state, idx);
+        node.color = 
+          if has_zero && has_max { RED } // Can't move
+          else if has_zero { ORANGE } // Can go up
+          else if has_max { DARKBLUE } // Can go down
+          else { DARKGREEN } // Free
+        ;
+      }
+    } else {
+      for (_, node) in self.graph.nodes.iter_mut() {
+        node.color = RED;
+      }
+    }
 
   }
 

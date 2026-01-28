@@ -125,7 +125,7 @@ impl StateData {
   fn classify_invalid(&mut self, invalid_list: Vec<PackedState>) {
     if invalid_list.is_empty() { return; }
     for state in invalid_list {
-      if self.is_invalid_theorem_1(&state) {
+      if self.is_invalid_theorem_1(state) {
         self.track_unique_state(state, Classification::InvalidT1);
       } else {
         self.track_unique_state(state, Classification::InvalidOther);
@@ -135,22 +135,27 @@ impl StateData {
 
   // If every node's closed neighborhood contains a min and a max,
   // this state is a theorem one invalid
-  fn is_invalid_theorem_1(&mut self, state: &PackedState) -> bool {
-    'node: for (central_idx, neighbor_indexes) in self.neighbors.iter().enumerate() {
-      let mut has_zero = false;
-      let mut has_max = false;
-
-      for node in neighbor_indexes.iter().chain(&[central_idx])
-        .map( |idx| { StateOps::get(*state, *idx, self.base, self.length()) } )
-      {
-        has_zero |= node == 0;
-        has_max |= node == self.base - 1;
-        if has_zero & has_max { continue 'node }
-      }
-
-      return false;
+  fn is_invalid_theorem_1(&self, state: PackedState) -> bool {
+    for center in 0 .. self.length() {
+      let (has_zero, has_max) = self.neighborhood_zero_or_max(state, center);
+      if !(has_zero && has_max) { return false }
     }
     return true;
+  }
+
+  pub fn neighborhood_zero_or_max(&self, state: PackedState, node: usize) -> (bool, bool) {
+    let mut has_zero = false;
+    let mut has_max = false;
+
+    for node in self.neighbors[node].iter().chain(&[node])
+      .map( |idx| { StateOps::get(state, *idx, self.base, self.length()) } )
+    {
+      has_zero |= node == 0;
+      has_max |= node == self.base - 1;
+      if has_zero && has_max { break }
+    }
+
+    (has_zero, has_max)
   }
 
   fn identify_bubbles(&mut self) {
