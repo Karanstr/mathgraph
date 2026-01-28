@@ -1,6 +1,7 @@
 mod graph; mod state; mod utilities;
 
 use std::mem::discriminant;
+use arboard::Clipboard;
 use macroquad::prelude::*;
 use macroquad::input::KeyCode as RKeyCode;
 use graph::Graph;
@@ -19,6 +20,9 @@ struct GraphProgram {
   max: StrType<u8>,
   graph_changed: bool,
 
+  save_cooldown: usize,
+  clipboard: Clipboard,
+
   loaded_state: PackedState,
   desired_state: PackedState,
 }
@@ -30,6 +34,9 @@ impl GraphProgram {
       mode: UserMode::AddRemove { selected: None },
       max: StrType::new(2),
       graph_changed: false,
+
+      clipboard: Clipboard::new().unwrap(),
+      save_cooldown: 0,
 
       loaded_state: 0,
       desired_state: 0,
@@ -45,6 +52,8 @@ impl GraphProgram {
 impl GraphProgram {
 
   pub async fn run(mut self) { loop {
+
+    self.tick();
 
     self.settings_window();
     
@@ -68,6 +77,11 @@ impl GraphProgram {
     next_frame().await
 
   } }
+
+  // We need other stuff
+  fn tick(&mut self) {
+    self.save_cooldown = self.save_cooldown.saturating_sub(1);
+  }
 
   fn settings_window(&mut self) {
     widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
@@ -166,7 +180,18 @@ impl GraphProgram {
 
   fn handle_mode_ui(&mut self, ui: &mut Ui) {
     'mode: {match &mut self.mode {
-      UserMode::Set { value} => {
+      UserMode::AddRemove { .. } => {
+
+        if ui.button(Vec2::new(5., 50.), "Save") {
+          self.clipboard.set_text( to_graph6(self.graph.get_neighbors()) ).unwrap();
+          self.save_cooldown = 500;
+        }
+        if self.save_cooldown > 0 {
+          ui.label(Vec2::new(5., 75.), "Copied to Clipboard!")
+        }
+
+      }
+      UserMode::Set { value } => {
 
         ui.input_text(hash!(), "Value", value.string_mut());
         value.parse();
@@ -381,7 +406,7 @@ impl GraphProgram {
         viewing_length,
         viewing_type,
         ..
-      } => { 
+      } => {
         
         if *viewing_length != 0 {
           viewing.step_strnum(*viewing_length, 1, RKeyCode::Right, RKeyCode::Left);

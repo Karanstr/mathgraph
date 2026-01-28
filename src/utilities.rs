@@ -55,6 +55,57 @@ impl UserMode {
   }
 }
 
+
+/// Serialize an undirected simple graph into graph6 format.
+/// 
+/// `adj[i]` contains the neighbors of vertex `i`.
+/// Assumes:
+/// - vertices are 0..n-1
+/// - no self-loops
+/// - undirected (i in adj[j] iff j in adj[i])
+pub fn to_graph6(adj: Vec< Vec<usize> >) -> String {
+  let n = adj.len();
+  assert!(n <= 62, "This implementation supports n <= 62");
+
+  // Encode number of vertices
+  let mut output = String::new();
+  output.push((n as u8 + 63) as char);
+
+  // Build adjacency lookup for fast edge testing
+  let mut has_edge = vec![vec![false; n]; n];
+  for (u, neighbors) in adj.iter().enumerate() {
+    for &v in neighbors {
+      assert!(u != v, "Self-loops are not allowed");
+      has_edge[u][v] = true;
+      has_edge[v][u] = true;
+    }
+  }
+
+  // Collect upper-triangle bits in graph6 order
+  let mut bits: Vec<u8> = Vec::new();
+  for j in 1..n {
+    for i in 0..j {
+      bits.push(if has_edge[i][j] { 1 } else { 0 });
+    }
+  }
+
+  // Pad with zeros to multiple of 6
+  while bits.len() % 6 != 0 {
+    bits.push(0);
+  }
+
+  // Encode bits in chunks of 6
+  for chunk in bits.chunks(6) {
+    let mut value = 0u8;
+    for &bit in chunk {
+      value = (value << 1) | bit;
+    }
+    output.push((value + 63) as char);
+  }
+
+  output
+}
+
 pub struct StrType<T> where T: FromStr + Clone + ToString {
   string: String,
   val: T,
@@ -105,3 +156,4 @@ where T:
   }
 
 }
+
