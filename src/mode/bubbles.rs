@@ -1,10 +1,20 @@
 use super::common::*;
+use crate::state::PackedState;
 
 pub struct Bubbles {
   bubble: StrType<usize>,
   bubble_length: usize,
   state: StrType<usize>,
   state_length: usize,
+}
+impl Bubbles {
+  pub fn assign_self(&mut self, program: &mut GraphProgram, state: PackedState) {
+    let (bubble_idx, state_idx) = if let Some(state_space) = &program.state_space {
+      state_space.bubble_data(state)
+    } else { (0, 0) };
+    self.bubble.assign(bubble_idx + 1);
+    self.state.assign(state_idx + 1);
+  }
 }
 impl super::Mode for Bubbles {
 
@@ -60,7 +70,7 @@ impl super::Mode for Bubbles {
     }
   }
 
-  fn interactions(&mut self, _program: &mut GraphProgram) {
+  fn interactions(&mut self, program: &mut GraphProgram) {
 
     if self.state_length != 0 {
       self.state.step_strnum(self.state_length, 1, KeyCode::Right, KeyCode::Left);
@@ -68,6 +78,23 @@ impl super::Mode for Bubbles {
 
     if self.bubble_length != 0 {
       self.bubble.step_strnum(self.bubble_length, 1, KeyCode::Up, KeyCode::Down);
+    }
+
+    let delta = 
+      if is_mouse_button_pressed(MouseButton::Left) { 1 }
+      else if is_mouse_button_pressed(MouseButton::Right) { -1 }
+      else { return } as i8
+    ;
+    if   let Some(node) = program.get_hovering()
+      && let Some(state_space) = &program.state_space
+      && let Some(state) = state_space.splash_state(
+        program.loaded_state,
+        node,
+        delta,
+        false
+      )
+    {
+      self.assign_self(program, state);
     }
 
   }

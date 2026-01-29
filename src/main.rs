@@ -203,5 +203,5 @@ impl GraphProgram {
 
 }
 
-#[macroquad::main("Graph Visualizer")]
+#[macroquad::main("Graph Visualizer V2.3.0")]
 async fn main() { GraphProgram::new().run().await; }
