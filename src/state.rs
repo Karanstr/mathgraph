@@ -336,10 +336,3 @@ pub fn parse_analysis(analysis: Vec<Vec<u32>>, max: u8, node_count: u8) -> Vec<V
   result
 }
 
-pub fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
-  let mut out = Vec::with_capacity(a.len() + b.len());
-  out.extend_from_slice(a);
-  out.extend_from_slice(b);
-  out
-}
-

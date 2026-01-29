@@ -1,9 +1,7 @@
-mod graph; mod state; mod utilities;
+mod graph; mod state; mod utilities; mod mode;
 
-use std::mem::discriminant;
-use arboard::Clipboard;
+use std::mem::take;
 use macroquad::prelude::*;
-use macroquad::input::KeyCode as RKeyCode;
 use graph::Graph;
 use macroquad::ui::*;
 use num2words::Lang::English;
@@ -11,36 +9,35 @@ use num2words::Num2Words;
 use state::*;
 use utilities::*;
 
+use crate::mode::Modes;
+
 const NODE_RADIUS: f32 = 40.;
 
 struct GraphProgram {
   graph: Graph,
   state_space: Option<StateData>,
-  mode: UserMode,
+  mode: Modes,
   max: StrType<u8>,
   graph_changed: bool,
-
-  save_cooldown: usize,
-  clipboard: Clipboard,
 
   loaded_state: PackedState,
   desired_state: PackedState,
 }
 impl GraphProgram {
   pub fn new() -> Self {
-    Self {
+    let mut program = Self {
       state_space: None,
       graph: Graph::new(),
-      mode: UserMode::AddRemove { selected: None },
+      mode: Modes::default(),
       max: StrType::new(2),
       graph_changed: false,
 
-      clipboard: Clipboard::new().unwrap(),
-      save_cooldown: 0,
-
       loaded_state: 0,
       desired_state: 0,
-    }
+    };
+    let mode = Modes::new(&mut program, 0);
+    program.mode = mode;
+    program
   }
   
   fn get_mouse_pos() -> IVec2 { Vec2::from(mouse_position()).as_ivec2() }
@@ -53,7 +50,9 @@ impl GraphProgram {
 
   pub async fn run(mut self) { loop {
 
-    self.tick();
+    let mut mode = take(&mut self.mode);
+    mode.tick(&mut self);
+    self.mode = mode;
 
     self.settings_window();
     
@@ -68,7 +67,7 @@ impl GraphProgram {
     // We can only interact with the canvas when we aren't hovering ui
     if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
 
-    if matches!(self.mode, UserMode::Analyze {..}) { self.draw_analysis_window(&mut root_ui()); }
+    if matches!(self.mode, Modes::Analyze(_)) { self.draw_analysis_window(); }
 
     if self.graph_changed { self.color_nodes(); }
     self.graph_changed = false;
@@ -76,12 +75,7 @@ impl GraphProgram {
     
     next_frame().await
 
-  } }
-
-  // We need other stuff
-  fn tick(&mut self) {
-    self.save_cooldown = self.save_cooldown.saturating_sub(1);
-  }
+  }}
 
   fn settings_window(&mut self) {
     widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
@@ -116,21 +110,13 @@ impl GraphProgram {
 
   fn set_mode(&mut self, ui: &mut Ui) {
     let mut new_mode = self.mode.as_int();
-    ui.combo_box(hash!(), "Mode", &[
-      "Add/Remove",
-      "Drag",
-      "Play",
-      "Set",
-      "Analyze",
-      "Bubbles",
-    ], &mut new_mode);
+    ui.combo_box(hash!(), "Mode", Modes::list_modes(), &mut new_mode);
 
-    let potential_mode = UserMode::from_int(new_mode);
-    if discriminant(&self.mode) == discriminant(&potential_mode) { return }
+    if self.mode.as_int() == new_mode { return; }
+    let mode = Modes::new(self, new_mode);
+    self.mode = mode;
 
-    self.mode = potential_mode;
-
-    if !matches!(&self.mode, UserMode::AddRemove { .. }) && self.state_space.is_none() {
+    if !matches!(&self.mode, Modes::AddRemove(_)) && self.state_space.is_none() {
       self.state_space = StateData::new(&mut self.graph, self.max.val());
      
       if let Some(state_space) = &self.state_space {
@@ -140,165 +126,13 @@ impl GraphProgram {
       }
     }
 
-    'mode:{ match &mut self.mode {
-      UserMode::AddRemove { .. } => {
-
-        self.state_space = None;
-        self.graph_changed = true;
-
-      }
-      UserMode::Analyze { 
-        viewing_type,
-        viewing,
-        ..
-      } => {
-
-        let Some(state_space) = &self.state_space else { break 'mode };
-        let (classification, idx) = state_space.classification_data(self.loaded_state);
-        *viewing_type = classification as usize;
-        // Wow I hate that I did this off by one nonsense
-        viewing.assign(idx + 1);
- 
-      }
-      UserMode::Bubbles {
-        bubble,
-        state,
-        ..
-      } => {
-
-        let Some(state_space) = &self.state_space else { break 'mode };
-        let (bubble_idx, state_idx) = state_space.bubble_data(self.loaded_state);
-        // Wow I hate that I did this off by one nonsense
-        bubble.assign(bubble_idx + 1);
-        state.assign(state_idx + 1);
-
-      }
-      _ => { }
-    }}
-
   }
 
   fn handle_mode_ui(&mut self, ui: &mut Ui) {
-    'mode: {match &mut self.mode {
-      UserMode::AddRemove { .. } => {
 
-        if ui.button(Vec2::new(5., 50.), "Save") {
-          self.clipboard.set_text( to_graph6(self.graph.get_neighbors()) ).unwrap();
-          self.save_cooldown = 500;
-        }
-        if self.save_cooldown > 0 {
-          ui.label(Vec2::new(5., 75.), "Copied to Clipboard!")
-        }
-
-      }
-      UserMode::Set { value } => {
-
-        ui.input_text(hash!(), "Value", value.string_mut());
-        value.parse();
-
-      }
-      UserMode::Play { allow_clamping} => {
-
-        ui.checkbox(hash!(), "Allow Clamping", allow_clamping);
-        
-      }
-      UserMode::Analyze {
-        viewing_type,
-        viewing_length,
-        viewing,
-        parsed_analysis
-      } => {
-
-        let Some(state_space) = self.state_space.as_ref() else { break 'mode };
-
-        let total = (state_space.base as usize).pow(state_space.length() as u32);
-        ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
-
-        // Identify view type
-        let old_type = *viewing_type;
-        ui.combo_box(hash!(), "Mode", &[
-          "All Invalid",    // 0
-          "Bad States",     // 1
-          "NotBad States",  // 2
-          "All Valid",      // 3
-        ], &mut *viewing_type);
-        let focused_states = match *viewing_type {
-          0 => &combine(
-            state_space.get_list(Classification::InvalidOther), 
-            state_space.get_list(Classification::InvalidT1)
-          ),
-          1 => state_space.get_list(Classification::InvalidT1),
-          2 => state_space.get_list(Classification::InvalidOther),
-          3 => state_space.get_list(Classification::Valid),
-          _ => unreachable!()
-        };
-
-        *viewing_length = focused_states.len();
-        
-        // Identify view idx
-        ui.input_text(
-          hash!(),
-          &format!("/{} Viewed States", focused_states.len()),
-          viewing.string_mut()
-        );
-        viewing.parse();
-
-        if parsed_analysis.is_empty() || old_type != *viewing_type {
-          let analysis = frequency_analysis(focused_states, self.graph.nodes.len(), self.max.val());
-          *parsed_analysis = parse_analysis(analysis, self.max.val(), self.graph.nodes.len() as u8);
-        }
-
-        // Load current viewing state
-        if let Some(state) = focused_states.get(viewing.val().saturating_sub(1)) {
-          self.desired_state = *state;
-        }
-
-      },
-      UserMode::Bubbles {
-        bubble,
-        bubble_length,
-        state,
-        state_length,
-      } => {
-        
-        let Some(state_space) = self.state_space.as_ref() else { break 'mode };
-
-        let old_bubble_idx = bubble.val();
-        // Identify bubble
-        ui.input_text(
-          hash!(),
-          &format!("/{} Viewed Bubbles", state_space.bubbles.len()),
-          bubble.string_mut()
-        );
-        bubble.parse();
-        if bubble.val() != old_bubble_idx { state.assign(1); }
-        *bubble_length = state_space.bubbles.len();
-        
-        let Some(bubble_vec) = state_space.bubbles.get(bubble.val().saturating_sub(1)) else {
-          break 'mode;
-        };
-        *state_length = bubble_vec.len();
-
-        // Identify view idx
-        ui.input_text(
-          hash!(),
-          &format!("/{} Viewed States", bubble_vec.len()),
-          state.string_mut()
-        );
-        state.parse();
-
-        if bubble.val() == state_space.bubbles.len() {
-          ui.label(Vec2::new(0., 100.), "Bubble of Size 1 Bubbles");
-        }
-
-        // Load current viewing state
-        if let Some(state) = bubble_vec.get(state.val().saturating_sub(1)) {
-          self.desired_state = *state;
-        }
-      
-      },
-      _ => {}
-    }}
+    let mut mode = take(&mut self.mode);
+    mode.ui(self, ui);
+    self.mode = mode;
 
     if let Some(state_space) = &self.state_space {
       let display = match state_space.classification_data(self.loaded_state).0 {
@@ -311,133 +145,10 @@ impl GraphProgram {
 
   }
 
-
   fn handle_interactions(&mut self) {
-    // Silly borrow issue
-    let hovering = self.get_hovering();
-    
-    match &mut self.mode {
-      UserMode::AddRemove { selected } => {
-
-        let mouse_pos = Self::get_mouse_pos();
-
-        // Delete hovering on right click
-        if is_mouse_button_down(MouseButton::Right) {
-          if let Some(remove) = hovering { 
-            self.graph.remove(remove);
-            self.graph_changed = true;
-          }
-        }
-
-        if is_mouse_button_pressed(MouseButton::Left) {
-          // Either we select the node we're hovering
-          *selected = hovering;
-          // Or we create a node
-          if selected.is_none() {
-            *selected = Some(self.graph.add_node(mouse_pos));
-            self.graph_changed = true;
-          }
-          // Or do nothing if we're not touching it but too close to make one??
-        }
-
-        // Draw line from selected node to mouse
-        if is_mouse_button_down(MouseButton::Left) && let Some(node) = selected {
-          let origin = self.graph.nodes.get(*node).unwrap().position;
-          draw_line(
-            mouse_pos.x as f32, mouse_pos.y as f32,
-            origin.x as f32, origin.y as f32,
-            4., WHITE
-          );
-        }
-
-        if is_mouse_button_released(MouseButton::Left) {
-          if let Some(node1) = *selected && let Some(node2) = hovering && node1 != node2 {
-            self.graph.attempt_unique_connection(node1, node2);
-            self.graph_changed = true;
-          }
-          *selected = None;
-        }
-
-      },
-      UserMode::Drag { selected} => {
-
-        if is_mouse_button_pressed(MouseButton::Left) { *selected = hovering; }
-        if is_mouse_button_released(MouseButton::Left) { *selected = None; }
-
-        if let Some(dragging) = *selected {
-          self.graph.nodes.get_mut(dragging).unwrap().position = Self::get_mouse_pos();
-        }
-
-      },
-      UserMode::Play { allow_clamping } => {
-
-        let delta = 
-          if is_mouse_button_pressed(MouseButton::Left) { 1 }
-          else if is_mouse_button_pressed(MouseButton::Right) { -1 }
-          else { return } as i8
-        ;
-        
-        if   let Some(node) = hovering
-          && let Some(state_space) = &self.state_space
-          && let Some(state) = state_space.splash_state(
-            self.loaded_state,
-            node,
-            delta,
-            *allow_clamping
-          )
-        {
-          self.desired_state = state;
-        }
-
-      },
-      UserMode::Set { value, .. } => {
-
-        if let Some(node) = hovering 
-          && value.val() <= self.max.val()
-          && is_mouse_button_pressed(MouseButton::Left)
-          && let Some(state_space) = &self.state_space
-        {
-          self.desired_state = state_space.set_packed(self.loaded_state, node, value.val());
-        }
-
-      },
-      UserMode::Analyze {
-        viewing,
-        viewing_length,
-        viewing_type,
-        ..
-      } => {
-        
-        if *viewing_length != 0 {
-          viewing.step_strnum(*viewing_length, 1, RKeyCode::Right, RKeyCode::Left);
-        }
-
-        if is_key_pressed(RKeyCode::Up) {
-          *viewing_type = if *viewing_type == 0 { 3 } else { *viewing_type - 1 };
-        }
-        if is_key_pressed(RKeyCode::Down) {
-          *viewing_type = (*viewing_type + 1) % 4;
-        }
-
-      },
-      UserMode::Bubbles {
-        state,
-        state_length,
-        bubble,
-        bubble_length,
-      } => {
-
-        if *state_length != 0 {
-          state.step_strnum(*state_length, 1, RKeyCode::Right, RKeyCode::Left);
-        }
-
-        if *bubble_length != 0 {
-          bubble.step_strnum(*bubble_length, 1, RKeyCode::Up, RKeyCode::Down);
-        }
-
-      }
-    }
-
+    let mut mode = take(&mut self.mode);
+    mode.interactions(self);
+    self.mode = mode;
   }
 
 
@@ -462,15 +173,15 @@ impl GraphProgram {
   }
 
 
-  fn draw_analysis_window(&self, ui: &mut Ui) {
-    if let UserMode::Analyze { parsed_analysis, .. } = &self.mode {
+  fn draw_analysis_window(&self) {
+    if let Modes::Analyze(analyze) = &self.mode {
       widgets::Window::new(hash!("Analysis"), vec2(0., 150.), vec2(250., 200.))
         .label("Analysis")
-        .ui(ui, |ui| 
+        .ui(&mut root_ui(), |ui| 
       {
         let mut y = 0.;
 
-        for (value, values) in parsed_analysis.iter().enumerate() {
+        for (value, values) in analyze.get_analysis().iter().enumerate() {
           for (node_count, state_count) in values.iter().enumerate() {
             ui.label(Vec2::new(0., y),
               &format!
