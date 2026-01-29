@@ -26,28 +26,31 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Set release filename
+        run: |
+          echo "LINUX_BIN=${BIN_NAME}-${GITHUB_REF_NAME}-linux-x86_64" >> $GITHUB_ENV
+          echo "WINDOWS_BIN=${BIN_NAME}-${GITHUB_REF_NAME}-windows-x86_64.exe" >> $GITHUB_ENV
+
       - name: Rename binary (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          mv target/release/$BIN_NAME \
-             $BIN_NAME-linux-x86_64
+          mv target/release/$BIN_NAME $LINUX_BIN
 
       - name: Upload binary (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.BIN_NAME }}-linux-x86_64
+          files: ${{ env.LINUX_BIN }}
 
       
       - name: Rename binary (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          mv target/release/$env:BIN_NAME.exe `
-             $env:BIN_NAME-windows-x86_64.exe
-      
+          mv target/release/$env:BIN_NAME.exe $env:WINDOWS_BIN
+        
       - name: Upload binary (Windows)
         if: matrix.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.BIN_NAME }}-windows-x86_64.exe
+          files: ${{ env.WINDOWS_BIN }}
