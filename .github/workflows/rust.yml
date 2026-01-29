@@ -27,6 +27,7 @@ jobs:
         run: cargo build --release
 
       - name: Set release filename
+        shell: bash
         run: |
           echo "LINUX_BIN=${BIN_NAME}-${GITHUB_REF_NAME}-linux-x86_64" >> $GITHUB_ENV
           echo "WINDOWS_BIN=${BIN_NAME}-${GITHUB_REF_NAME}-windows-x86_64.exe" >> $GITHUB_ENV
