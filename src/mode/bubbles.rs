@@ -1,3 +1,5 @@
+use eframe::egui::Event;
+
 use super::common::*;
 use crate::state::PackedState;
 
@@ -22,12 +24,12 @@ impl super::Mode for Bubbles {
     
     let (bubble_idx, state_idx) = if let Some(state_space) = &program.state_space {
       state_space.bubble_data(program.loaded_state)
-    } else { (1,1) };
+    } else { (0, 0) };
 
     Self {
-      bubble: StrType::new(bubble_idx),
+      bubble: StrType::new(bubble_idx + 1),
       bubble_length: 0,
-      state: StrType::new(state_idx),
+      state: StrType::new(state_idx + 1),
       state_length: 0,
     }
   }
@@ -37,12 +39,13 @@ impl super::Mode for Bubbles {
     let Some(state_space) = program.state_space.as_ref() else { return };
 
     let old_bubble_idx = self.bubble.val();
-    // Identify bubble
-    ui.input_text(
-      hash!(),
-      &format!("/{} Viewed Bubbles", state_space.bubbles.len()),
-      self.bubble.string_mut()
-    );
+    ui.horizontal(|ui| {
+      TextEdit::singleline(self.bubble.string_mut())
+        .id(Id::new("Bubble"))
+        .show(ui)
+      ;
+      ui.label(format!("/{} Viewed Bubbles", self.bubble_length));
+    });
     self.bubble.parse();
     if self.bubble.val() != old_bubble_idx { self.state.assign(1); }
     self.bubble_length = state_space.bubbles.len();
@@ -52,16 +55,16 @@ impl super::Mode for Bubbles {
     };
     self.state_length = bubble_vec.len();
 
-    // Identify view idx
-    ui.input_text(
-      hash!(),
-      &format!("/{} Viewed States", bubble_vec.len()),
-      self.state.string_mut()
-    );
+    ui.horizontal(|ui| {
+      TextEdit::singleline(self.state.string_mut())
+        .id(Id::new("State"))
+        .show(ui)
+      ;
+      ui.label(format!("/{} Viewed States", self.state_length));
+    });
     self.state.parse();
-
     if self.bubble.val() == state_space.bubbles.len() {
-      ui.label(Vec2::new(0., 100.), "Bubble of Size 1 Bubbles");
+      ui.label("Bubble of Size 1 Bubbles");
     }
 
     // Load current viewing state
@@ -70,31 +73,53 @@ impl super::Mode for Bubbles {
     }
   }
 
-  fn interactions(&mut self, program: &mut GraphProgram) {
+  fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
 
-    if self.state_length != 0 {
-      self.state.step_strnum(self.state_length, 1, KeyCode::Right, KeyCode::Left);
+    let mut up_pressed = false;
+    let mut down_pressed = false;
+    let mut left_pressed = false;
+    let mut right_pressed = false;
+    response.ctx.input(|input| {
+      for event in &input.events {
+        match event {
+          Event::Key { key, pressed: true, repeat: false, .. } => {
+            match *key {
+              Key::ArrowDown => down_pressed = true,
+              Key::ArrowUp => up_pressed = true,
+              Key::ArrowLeft => left_pressed = true,
+              Key::ArrowRight => right_pressed = true,
+              _ => (),
+            }
+          }
+          _ => {}
+        }
+      }
+
+      // Play the game with only reversible actions
+      let delta = 
+        if input.pointer.primary_pressed() { 1 }
+        else if input.pointer.secondary_pressed() { -1 }
+        else { return } as i8
+      ;
+      if   let Some(node) = program.get_node_at(input.pointer.interact_pos().unwrap())
+        && let Some(state_space) = &program.state_space
+        && let Some(state) = state_space.splash_state(
+          program.loaded_state,
+          node,
+          delta,
+          false
+        )
+      {
+        self.assign_self(program, state);
+      }
+
+    });
+    
+    if self.state_length != 0 && (right_pressed || left_pressed) {
+      self.state.step_strnum(self.state_length, 1, right_pressed);
     }
-
-    if self.bubble_length != 0 {
-      self.bubble.step_strnum(self.bubble_length, 1, KeyCode::Up, KeyCode::Down);
-    }
-
-    let delta = 
-      if is_mouse_button_pressed(MouseButton::Left) { 1 }
-      else if is_mouse_button_pressed(MouseButton::Right) { -1 }
-      else { return } as i8
-    ;
-    if   let Some(node) = program.get_hovering()
-      && let Some(state_space) = &program.state_space
-      && let Some(state) = state_space.splash_state(
-        program.loaded_state,
-        node,
-        delta,
-        false
-      )
-    {
-      self.assign_self(program, state);
+    if self.bubble_length != 0 && (up_pressed || down_pressed) {
+      self.bubble.step_strnum(self.bubble_length, 1, up_pressed);
     }
 
   }

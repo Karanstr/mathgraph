@@ -1,9 +1,9 @@
 mod graph; mod state; mod utilities; mod mode;
 
 use std::mem::take;
-use macroquad::prelude::*;
+use eframe::App;
+use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, Ui, Window};
 use graph::Graph;
-use macroquad::ui::*;
 use num2words::Lang::English;
 use num2words::Num2Words;
 use state::*;
@@ -40,62 +40,24 @@ impl GraphProgram {
     program
   }
   
-  fn get_mouse_pos() -> IVec2 { Vec2::from(mouse_position()).as_ivec2() }
-
-  fn get_hovering(&self) -> Option<usize> {
-    self.graph.node_at(Self::get_mouse_pos(), NODE_RADIUS)
+  fn get_node_at(&self, pos: Pos2) -> Option<usize> {
+    self.graph.node_at(pos, NODE_RADIUS)
   }
 }
 impl GraphProgram {
 
-  pub async fn run(mut self) { loop {
-
-    let mut mode = take(&mut self.mode);
-    mode.tick(&mut self);
-    self.mode = mode;
-
-    self.settings_window();
-    
-    if self.desired_state != self.loaded_state
-      && let Some(state_space) = &self.state_space
-    {
-      self.graph.load_state(state_space.parse_state(self.desired_state));
-      self.loaded_state = self.desired_state;
-      self.graph_changed = true;
-    }
-
-    // We can only interact with the canvas when we aren't hovering ui
-    if !root_ui().is_mouse_over(mouse_position().into()) { self.handle_interactions(); }
-
-    if matches!(self.mode, Modes::Analyze(_)) { self.draw_analysis_window(); }
-
-    if self.graph_changed { self.color_nodes(); }
-    self.graph_changed = false;
-    self.graph.render(NODE_RADIUS);
-    
-    next_frame().await
-
-  }}
-
-  fn settings_window(&mut self) {
-    widgets::Window::new(hash!("Settings"), vec2(0., 0.), vec2(250., 150.))
-      .label("Settings")
-      .ui(&mut *root_ui(), |ui| 
-    {
-
+  fn settings_window(&mut self, ctx: &Context) {
+    Window::new("Settings").show(ctx, |ui| {
       self.handle_max(ui);
-
       self.set_mode(ui);
-
       self.handle_mode_ui(ui);
-    
     });
   }
 
   // I don't like directly touching the graph like this, but if I don't then max can't be changed
   // during add/remove (or I need edgecases)
   fn handle_max(&mut self, ui: &mut Ui) {
-    ui.input_text(hash!(), "Max", self.max.string_mut());
+    ui.text_edit_singleline(self.max.string_mut());
     let old_max = self.max.val();
     if old_max == self.max.parse() { return; }
     
@@ -108,9 +70,21 @@ impl GraphProgram {
     self.graph_changed = true;
   }
 
+  // Revisit this, egui is far stronger so the hack I used for macroquad can likely be improved
+  // I almost certainly shouldn't be passing a mutable reference just to create a variant. Instead
+  // it should read to construct its internal state, then we should match and mutate on our side..
   fn set_mode(&mut self, ui: &mut Ui) {
     let mut new_mode = self.mode.as_int();
-    ui.combo_box(hash!(), "Mode", Modes::list_modes(), &mut new_mode);
+    ComboBox::from_label("Mode").selected_text(format!("{}", self.mode))
+      .show_ui(ui, |ui| {
+        ui.selectable_value(&mut new_mode, 0, "Add/Remove");
+        ui.selectable_value(&mut new_mode, 1, "Drag");
+        ui.selectable_value(&mut new_mode, 2, "Play");
+        ui.selectable_value(&mut new_mode, 3, "Set");
+        ui.selectable_value(&mut new_mode, 4, "Analyze");
+        ui.selectable_value(&mut new_mode, 5, "Bubbles");
+      })
+    ;
 
     if self.mode.as_int() == new_mode { return; }
     let mode = Modes::new(self, new_mode);
@@ -140,17 +114,10 @@ impl GraphProgram {
         Classification::InvalidT1 => { "Invalid, Theorem 1" },
         Classification::InvalidOther => { "Invalid, Unknown Theorem" },
       };
-      ui.label(Vec2::new(0., 85.), display);
+      ui.label(display);
     }
 
   }
-
-  fn handle_interactions(&mut self) {
-    let mut mode = take(&mut self.mode);
-    mode.interactions(self);
-    self.mode = mode;
-  }
-
 
   fn color_nodes(&mut self) {
 
@@ -158,50 +125,107 @@ impl GraphProgram {
       for (idx, node) in self.graph.nodes.iter_mut() {
         let (has_zero, has_max) = state_space.neighborhood_zero_or_max(self.loaded_state, idx);
         node.color = 
-          if has_zero && has_max { RED } // Can't move
-          else if has_zero { ORANGE } // Can go up
-          else if has_max { DARKBLUE } // Can go down
-          else { DARKGREEN } // Free
+          if has_zero && has_max { Color32::RED } // Can't move
+          else if has_zero { Color32::ORANGE } // Can go up
+          else if has_max { Color32::DARK_BLUE } // Can go down
+          else { Color32::DARK_GREEN } // Free
         ;
       }
     } else {
       for (_, node) in self.graph.nodes.iter_mut() {
-        node.color = RED;
+        node.color = Color32::RED;
       }
     }
 
   }
 
 
-  fn draw_analysis_window(&self) {
+  fn draw_analysis_window(&self, ctx: &Context) {
     if let Modes::Analyze(analyze) = &self.mode {
-      widgets::Window::new(hash!("Analysis"), vec2(0., 150.), vec2(250., 200.))
-        .label("Analysis")
-        .ui(&mut root_ui(), |ui| 
-      {
-        let mut y = 0.;
-
-        for (value, values) in analyze.get_analysis().iter().enumerate() {
-          for (node_count, state_count) in values.iter().enumerate() {
-            ui.label(Vec2::new(0., y),
-              &format!
-              (
+      Window::new("Analysis")
+        .default_pos(Pos2::new(0., 150.))
+        .show(ctx, |ui| {
+          for (value, values) in analyze.get_analysis().iter().enumerate() {
+            for (node_count, state_count) in values.iter().enumerate() {
+              ui.label(&format!(
                 "{state_count} {} {} {value}{}",
                 if *state_count == 1 {"state has"} else {"states have"},
                 Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
                 if node_count == 1 { "" } else {"s"}
-              )
-            );
-
-            y += 10.;
+              ));
+            }
           }
-        }
-
       });
     }
   }
 
+  fn draw_graph(&self, ui: &mut Ui) {
+    let lines = Painter::new(ui.ctx().clone(), LayerId::new(Order::Background, Id::new("Lines")), ui.clip_rect());
+    let nodes = Painter::new(ui.ctx().clone(), LayerId::new(Order::Middle, Id::new("Nodes")), ui.clip_rect());
+    for (current, node) in self.graph.nodes.iter() {
+      nodes.circle_filled(node.position, NODE_RADIUS, node.color);
+      nodes.text(
+        node.position,
+        Align2::CENTER_CENTER,
+        &format!("{}", node.value),
+        FontId::new(NODE_RADIUS, eframe::egui::FontFamily::Proportional),
+        Color32::WHITE
+      );
+
+      for neighbor in &node.neighbors {
+        if *neighbor > current {
+          lines.line_segment(
+            [node.position, self.graph.nodes.get(*neighbor).unwrap().position],
+            Stroke::new(4., Color32::WHITE)
+          );
+        }
+      }
+    }
+  }
+
+  fn main_frame(&mut self, ctx: &Context) {
+    CentralPanel::default().show(ctx, |ui| {
+      let response = ui.allocate_rect(ui.clip_rect(), Sense::click_and_drag());
+
+      let mut mode = take(&mut self.mode);
+      mode.interactions(self, response);
+      self.mode = mode;
+
+      if self.desired_state != self.loaded_state
+        && let Some(state_space) = &self.state_space
+      {
+        self.graph.load_state(state_space.parse_state(self.desired_state));
+        self.loaded_state = self.desired_state;
+        self.graph_changed = true;
+      }
+
+      if self.graph_changed { self.color_nodes(); self.graph_changed = false; }
+      self.draw_graph(ui);
+    });
+  }
+
+}
+impl App for GraphProgram {
+  fn update(&mut self, ctx: &eframe::egui::Context, _: &mut eframe::Frame) {
+    let mut mode = take(&mut self.mode);
+    mode.tick(self);
+    self.mode = mode;
+
+    self.settings_window(ctx);
+
+    if matches!(self.mode, Modes::Analyze(_)) { self.draw_analysis_window(ctx); }
+
+    self.main_frame(ctx);
+
+  }
 }
 
-#[macroquad::main("Graph Visualizer V2.4.0")]
-async fn main() { GraphProgram::new().run().await; }
+fn main() {
+  let mut native_options = eframe::NativeOptions::default();
+  native_options.viewport = native_options.viewport.with_title("Graph Application");
+  let _ = eframe::run_native(
+    "GraphAnalysis",
+    native_options,
+    Box::new(|_cc| Ok(Box::new(GraphProgram::new())))
+  );
+}

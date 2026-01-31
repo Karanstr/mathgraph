@@ -1,3 +1,5 @@
+use eframe::egui::{ComboBox, Event};
+
 use super::common::*;
 use crate::state::{PackedState, Classification, frequency_analysis, parse_analysis};
 
@@ -33,16 +35,24 @@ impl super::Mode for Analyze {
     let Some(state_space) = program.state_space.as_ref() else { return };
 
     let total = (state_space.base as usize).pow(state_space.length() as u32);
-    ui.label(Vec2::new(30., 110.), &format!("{total} Total"));
+    ui.label(&format!("{total} Total"));
 
     // Identify view type
     let old_type = self.viewing_type;
-    ui.combo_box(hash!(), "Mode", &[
-      "All Invalid",    // 0
-      "Bad States",     // 1
-      "NotBad States",  // 2
-      "All Valid",      // 3
-    ], &mut self.viewing_type);
+    let names = [
+      "All Invalid",
+      "Bad States",
+      "NotBad States",
+      "All Valid",
+    ];
+    ComboBox::from_label("Type").selected_text(format!("{}", names[old_type]))
+      .show_ui(ui, |ui| {
+        ui.selectable_value(&mut self.viewing_type, 0, names[0]);
+        ui.selectable_value(&mut self.viewing_type, 1, names[1]);
+        ui.selectable_value(&mut self.viewing_type, 2, names[2]);
+        ui.selectable_value(&mut self.viewing_type, 3, names[3]);
+      })
+    ;
     let focused_states = match self.viewing_type {
       0 => &combine(
         state_space.get_list(Classification::InvalidOther), 
@@ -57,12 +67,15 @@ impl super::Mode for Analyze {
     self.viewing_length = focused_states.len();
 
     // Identify view idx
-    ui.input_text(
-      hash!(),
-      &format!("/{} Viewed States", self.viewing_length),
-      self.viewing.string_mut()
-    );
-    self.viewing.parse();
+    ui.horizontal(|ui| {
+      TextEdit::singleline(self.viewing.string_mut())
+        .id(Id::new("Viewing"))
+        .show(ui)
+      ;
+      self.viewing.parse();
+
+      ui.label(format!("/{} Viewed States", self.viewing_length));
+    });
 
     if self.parsed_analysis.is_empty() || old_type != self.viewing_type {
       let analysis = frequency_analysis(focused_states, state_space.length(), program.max.val());
@@ -75,18 +88,42 @@ impl super::Mode for Analyze {
     }
   }
 
-  fn interactions(&mut self, _program: &mut GraphProgram) {
+  fn interactions(&mut self, _program: &mut GraphProgram, response: Response) {
 
-    if self.viewing_length != 0 {
-      self.viewing.step_strnum(self.viewing_length, 1, KeyCode::Right, KeyCode::Left);
+    let mut up_pressed = false;
+    let mut down_pressed = false;
+    let mut left_pressed = false;
+    let mut right_pressed = false;
+    response.ctx.input(|input| {
+      for event in &input.events {
+        match event {
+          Event::Key { key, pressed: true, repeat: false, .. } => {
+            match *key {
+              Key::ArrowDown => down_pressed = true,
+              Key::ArrowUp => up_pressed = true,
+              Key::ArrowLeft => left_pressed = true,
+              Key::ArrowRight => right_pressed = true,
+              _ => (),
+            }
+          }
+          _ => {}
+        }
+      }
+    });
+  
+    if self.viewing_length != 0 && (right_pressed || left_pressed) {
+      self.viewing.step_strnum(self.viewing_length, 1, right_pressed);
     }
-
-    if is_key_pressed(KeyCode::Up) {
+    
+    if up_pressed {
       self.viewing_type = if self.viewing_type == 0 { 3 } else { self.viewing_type - 1 };
     }
-    if is_key_pressed(KeyCode::Down) {
+    
+    if down_pressed {
       self.viewing_type = (self.viewing_type + 1) % 4;
     }
+
+
   }
 
 }

@@ -1,6 +1,5 @@
 use std::str::FromStr;
 use std::ops::{Add, Rem, Sub};
-use macroquad::prelude::*;
 
 pub struct StrType<T> where T: FromStr + Clone + ToString {
   string: String,
@@ -37,17 +36,17 @@ where T:
 {
 
   // I'm not a huge fan of this
-  pub fn step_strnum(&mut self, max: T, step_size: T, increase: KeyCode, decrease: KeyCode) 
+  pub fn step_strnum(&mut self, max: T, step_size: T, increase: bool) 
   {
-    if is_key_pressed(decrease) {
+    if increase {
+      self.assign((self.val % max) + step_size);
+    } else {
       let new_val = 
         if self.val == step_size { max }
         else if self.val > max { max }
         else { self.val - step_size }
       ;
       self.assign(new_val);
-    } else if is_key_pressed(increase) {
-      self.assign((self.val % max) + step_size);
     }
   }
 

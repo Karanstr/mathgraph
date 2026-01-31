@@ -5,15 +5,16 @@ mod set;
 mod analyze;
 mod bubbles;
 
+use eframe::egui::{Response, Ui};
+
 use crate::GraphProgram;
-use macroquad::ui::Ui;
 
 trait Mode where Self: Sized {
 
   fn create(_program: &mut GraphProgram) -> Self;
   fn ui(&mut self, _program: &mut GraphProgram, _ui: &mut Ui) {}
   fn tick(&mut self, _program: &mut GraphProgram) {}
-  fn interactions(&mut self, _program: &mut GraphProgram) {}
+  fn interactions(&mut self, _program: &mut GraphProgram, _response: Response) {}
 
 }
 pub enum Modes {
@@ -26,6 +27,20 @@ pub enum Modes {
   SwapState,
 }
 impl Default for Modes { fn default() -> Self { Self::SwapState } }
+impl std::fmt::Display for Modes {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let str = match self {
+      Self::AddRemove(_) => "Add/Remove",
+      Self::Drag(_) => "Drag",
+      Self::Play(_) => "Play",
+      Self::Set(_) => "Set",
+      Self::Analyze(_) => "Analyze",
+      Self::Bubbles(_) => "Bubbles",
+      Self::SwapState => "Invalid State!!"
+    };
+    write!(f, "{}", str)
+  }
+}
 impl Modes {
 
   pub fn new(program: &mut GraphProgram, int: usize) -> Self {
@@ -51,18 +66,6 @@ impl Modes {
       Self::SwapState => unreachable!(),
     }
   }
-
-  pub fn list_modes() -> &'static[&'static str] {
-    &[
-      "Add/Remove",
-      "Drag",
-      "Play",
-      "Set",
-      "Analyze",
-      "Bubbles"
-    ]
-  }
-
 
 }
 impl Modes {
@@ -91,14 +94,14 @@ impl Modes {
     }
   }
 
-  pub fn interactions(&mut self, program: &mut GraphProgram) {
+  pub fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
     match self {
-      Self::AddRemove(inside) => inside.interactions(program),
-      Self::Drag(inside) => inside.interactions(program),
-      Self::Play(inside) => inside.interactions(program),
-      Self::Set(inside) => inside.interactions(program),
-      Self::Analyze(inside) => inside.interactions(program),
-      Self::Bubbles(inside) => inside.interactions(program),
+      Self::AddRemove(inside) => inside.interactions(program, response),
+      Self::Drag(inside) => inside.interactions(program, response),
+      Self::Play(inside) => inside.interactions(program, response),
+      Self::Set(inside) => inside.interactions(program, response),
+      Self::Analyze(inside) => inside.interactions(program, response),
+      Self::Bubbles(inside) => inside.interactions(program, response),
       Self::SwapState => unreachable!(),
     }
   }
@@ -107,8 +110,7 @@ impl Modes {
 
 mod common {
   pub(crate) use crate::GraphProgram;
-  pub use macroquad::ui::Ui;
-  pub use macroquad::ui::hash;
-  pub use macroquad::prelude::*;
+  pub use eframe::egui::Ui;
   pub use crate::utilities::StrType;
+  pub use eframe::egui::{Key, PointerButton, Response, TextEdit, Id};
 }

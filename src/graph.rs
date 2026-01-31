@@ -1,8 +1,5 @@
-use macroquad::math::IVec2;
+use eframe::egui::{Color32, Pos2};
 use lilypads::Pond;
-use macroquad::shapes::*;
-use macroquad::color::*;
-use macroquad::text::draw_text;
 
 pub struct Graph { 
   pub nodes: Pond<Node>,
@@ -10,7 +7,7 @@ pub struct Graph {
 impl Graph {
   pub fn new() -> Self { Self { nodes: Pond::new() } }
   
-  pub fn add_node(&mut self, position: IVec2) -> usize {
+  pub fn add_node(&mut self, position: Pos2) -> usize {
     self.nodes.insert(Node::new(position))
   }
 
@@ -45,44 +42,15 @@ impl Graph {
     }
   }
 
-  pub fn node_at(&self, point: IVec2, radius: f32) -> Option<usize> {
+  pub fn node_at(&self, point: Pos2, radius: f32) -> Option<usize> {
     for (idx, node) in self.nodes.safe_data().iter().enumerate() {
       if let Some(node) = *node {
-        if node.position.distance_squared(point) < (radius as i32).pow(2) {
+        if node.position.distance_sq(point) < (radius as i32).pow(2) as f32 {
           return Some(idx)
         }
       }
     }
     None
-  }
-
-  pub fn render(&self, radius: f32) {
-    let mut circles: Vec<(IVec2, u8, Color)> = Vec::new();
-    for (_, node) in self.nodes.iter() {
-      circles.push((node.position, node.value, node.color));
-      for neighbor in &node.neighbors {
-        let other_node = self.nodes.get(*neighbor).unwrap();
-        draw_line(
-          node.position.x as f32, node.position.y as f32,
-          other_node.position.x as f32, other_node.position.y as f32,
-          4., WHITE
-        );
-      }
-    }
-    
-    for (pos, value, color) in circles {
-      draw_circle(
-        pos.x as f32,
-        pos.y as f32,
-        radius, color
-      );
-      draw_text(
-        &format!("{value}"),
-        pos.x as f32 - radius/4. * (1 + value.max(1).ilog10()) as f32,
-        pos.y as f32 + radius/4.,
-        radius, WHITE
-      );
-    }
   }
 
 }
@@ -119,18 +87,18 @@ impl Graph {
 
 #[derive(Debug)]
 pub struct Node {
-  pub position: IVec2,
+  pub position: Pos2,
   pub neighbors: Vec<usize>,
   pub value: u8,
-  pub color: Color,
+  pub color: Color32,
 }
 impl Node {
-  pub fn new(position: IVec2) -> Self {
+  pub fn new(position: Pos2) -> Self {
     Self {
       position,
       neighbors: Vec::with_capacity(0),
       value: 0,
-      color: RED,
+      color: Color32::RED,
     }
   }
 

@@ -12,18 +12,19 @@ impl super::Mode for Play {
   }
 
   fn ui(&mut self, _program: &mut GraphProgram, ui: &mut Ui) {
-    ui.checkbox(hash!(), "Allow Clamping", &mut self.allow_clamping);
+    ui.checkbox(&mut self.allow_clamping, "Allow Clamping");
   }
 
-  fn interactions(&mut self, program: &mut GraphProgram) {
-    let delta = 
-      if is_mouse_button_pressed(MouseButton::Left) { 1 }
-      else if is_mouse_button_pressed(MouseButton::Right) { -1 }
-      else { return } as i8
-    ;
-    if   let Some(node) = program.get_hovering()
+  fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
+    let mut delta: i8 = 0;
+    response.ctx.input(|input| {
+      delta = if input.pointer.primary_pressed() { 1 }
+      else if input.pointer.secondary_pressed() { -1 }
+      else { return };
+    });
+    if let Some(node) = program.get_node_at(response.ctx.pointer_interact_pos().unwrap())
       && let Some(state_space) = &program.state_space
-        && let Some(state) = state_space.splash_state(
+      && let Some(state) = state_space.splash_state(
           program.loaded_state,
           node,
           delta,

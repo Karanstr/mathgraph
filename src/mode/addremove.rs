@@ -1,5 +1,6 @@
 use super::common::*;
 use arboard::{Clipboard, Error as ClipError};
+use eframe::egui::{Color32, LayerId, Order, Painter, Stroke};
 
 pub struct AddRemove {
   selected: Option<usize>,
@@ -22,62 +23,65 @@ impl super::Mode for AddRemove {
     let clipboard = match &mut self.clipboard {
       Ok(clipboard) => clipboard,
       Err(error) => {
-        ui.label(Vec2::new(5., 75.), &error.to_string());
-        ui.label(Vec2::new(5., 90.), &format!("Please try again!"));
+        ui.label(&error.to_string());
+        ui.label(&format!("Please try again!"));
         self.clipboard = Clipboard::new();
         return;
       }
     };
-
-    if ui.button(Vec2::new(5., 50.), "Save") {
-      // there is certainly a cheaper solution, but atm not my problem
-      program.graph.contiguize_and_trim();
-      clipboard.set_text( to_graph6( program.graph.get_neighbors() ) ).unwrap();
-      self.action_cd = 300;
-    }
-    if self.action_cd > 0 {
-      ui.label(Vec2::new(5., 75.), "Copied to Clipboard!")
-    }
+    
+    ui.horizontal(|ui| {
+      if ui.button("Save").clicked() {
+        // there is certainly a cheaper solution, but atm not my problem
+        program.graph.contiguize_and_trim();
+        clipboard.set_text( to_graph6( program.graph.get_neighbors() ) ).unwrap();
+        self.action_cd = 300;
+      }
+      if self.action_cd > 0 {
+        ui.label("Copied to Clipboard!");
+      }
+    });
   }
 
   fn tick(&mut self, _program: &mut GraphProgram) {
     self.action_cd = self.action_cd.saturating_sub(1);
   }
 
-  fn interactions(&mut self, program: &mut GraphProgram) {
-    let mouse_pos = GraphProgram::get_mouse_pos();
-    let hovering = program.get_hovering();
+  fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
+    let Some(pos) = response.hover_pos() else { return };
+    let hovering = program.get_node_at(pos);
 
-    // Delete hovering on right click
-    if is_mouse_button_down(MouseButton::Right) {
-      if let Some(remove) = hovering { 
-        program.graph.remove(remove);
-        program.graph_changed = true;
-      }
-    }
+    response.ctx.input(|input| {
 
-    if is_mouse_button_pressed(MouseButton::Left) {
-      // Either we select the node we're hovering
-      self.selected = hovering;
-      // Or we create a node
-      if self.selected.is_none() {
-        self.selected = Some(program.graph.add_node(mouse_pos));
-        program.graph_changed = true;
+      // Delete hovering on right click
+      if input.pointer.secondary_down() {
+        if let Some(remove) = hovering { 
+          program.graph.remove(remove);
+          program.graph_changed = true;
+        }
       }
-      // Or do nothing if we're not touching it but too close to make one??
-    }
+
+      if input.pointer.primary_pressed() {
+        // Either we select the node we're hovering
+        self.selected = hovering;
+        // Or we create a node
+        if self.selected.is_none() {
+          self.selected = Some(program.graph.add_node(pos));
+          program.graph_changed = true;
+        }
+        // Or do nothing if we're not touching it but too close to make one??
+      }
+
+    }); 
 
     // Draw line from selected node to mouse
-    if is_mouse_button_down(MouseButton::Left) && let Some(node) = self.selected {
+    if response.dragged_by(PointerButton::Primary) && let Some(node) = self.selected {
       let origin = program.graph.nodes.get(node).unwrap().position;
-      draw_line(
-        mouse_pos.x as f32, mouse_pos.y as f32,
-        origin.x as f32, origin.y as f32,
-        4., WHITE
-      );
+      let lines = Painter::new(response.ctx.clone(), LayerId::new(Order::Background, Id::new("Lines")), response.interact_rect);
+      lines.line_segment([pos, origin], Stroke::new(4., Color32::WHITE));
     }
-
-    if is_mouse_button_released(MouseButton::Left) {
+    
+    if response.drag_stopped_by(PointerButton::Primary) {
       if let Some(node1) = self.selected && let Some(node2) = hovering && node1 != node2 {
         program.graph.attempt_unique_connection(node1, node2);
         program.graph_changed = true;
