@@ -7,11 +7,11 @@ mod bubbles;
 
 use eframe::egui::{Response, Ui};
 
-use crate::GraphProgram;
+use crate::{GraphProgram};
 
 trait Mode where Self: Sized {
 
-  fn create(_program: &mut GraphProgram) -> Self;
+  fn create(_state_data: &mut GraphProgram) -> Self;
   fn ui(&mut self, _program: &mut GraphProgram, _ui: &mut Ui) {}
   fn tick(&mut self, _program: &mut GraphProgram) {}
   fn interactions(&mut self, _program: &mut GraphProgram, _response: Response) {}
@@ -113,4 +113,5 @@ mod common {
   pub use eframe::egui::Ui;
   pub use crate::utilities::StrType;
   pub use eframe::egui::{Key, PointerButton, Response, TextEdit, Id};
+  // pub use crate::state::StateData;
 }

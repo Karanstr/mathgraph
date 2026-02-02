@@ -4,8 +4,6 @@ use std::mem::take;
 use eframe::App;
 use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, Ui, Window};
 use graph::Graph;
-use num2words::Lang::English;
-use num2words::Num2Words;
 use state::*;
 use utilities::*;
 
@@ -120,7 +118,6 @@ impl GraphProgram {
   }
 
   fn color_nodes(&mut self) {
-
     if let Some(state_space) = &self.state_space {
       for (idx, node) in self.graph.nodes.iter_mut() {
         let (has_zero, has_max) = state_space.neighborhood_zero_or_max(self.loaded_state, idx);
@@ -137,26 +134,6 @@ impl GraphProgram {
       }
     }
 
-  }
-
-
-  fn draw_analysis_window(&self, ctx: &Context) {
-    if let Modes::Analyze(analyze) = &self.mode {
-      Window::new("Analysis")
-        .default_pos(Pos2::new(0., 150.))
-        .show(ctx, |ui| {
-          for (value, values) in analyze.get_analysis().iter().enumerate() {
-            for (node_count, state_count) in values.iter().enumerate() {
-              ui.label(&format!(
-                "{state_count} {} {} {value}{}",
-                if *state_count == 1 {"state has"} else {"states have"},
-                Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
-                if node_count == 1 { "" } else {"s"}
-              ));
-            }
-          }
-      });
-    }
   }
 
   fn draw_graph(&self, ui: &mut Ui) {
@@ -212,8 +189,6 @@ impl App for GraphProgram {
     self.mode = mode;
 
     self.settings_window(ctx);
-
-    if matches!(self.mode, Modes::Analyze(_)) { self.draw_analysis_window(ctx); }
 
     self.main_frame(ctx);
 

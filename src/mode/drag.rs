@@ -5,7 +5,8 @@ pub struct Drag {
 }
 impl super::Mode for Drag {
 
-  fn create(_program: &mut crate::GraphProgram) -> Self {
+  fn create(_program: &mut GraphProgram) -> Self {
+    
     Self { selected: None }
   }
 

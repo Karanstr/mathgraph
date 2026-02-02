@@ -1,4 +1,5 @@
-use eframe::egui::{ComboBox, Event};
+use eframe::egui::{ComboBox, Context, Event, Pos2, Window};
+use num2words::{Num2Words, Lang::English};
 
 use super::common::*;
 use crate::state::{PackedState, Classification, frequency_analysis, parse_analysis};
@@ -10,7 +11,22 @@ pub struct Analyze {
   parsed_analysis: Vec<Vec<u32>>,
 }
 impl Analyze {
-  pub fn get_analysis(&self) -> &Vec<Vec<u32>> { &self.parsed_analysis }
+  fn draw_analysis_window(&self, ctx: &Context) {
+    Window::new("Analysis")
+      .default_pos(Pos2::new(0., 150.))
+      .show(ctx, |ui| {
+        for (value, values) in self.parsed_analysis.iter().enumerate() {
+          for (node_count, state_count) in values.iter().enumerate() {
+            ui.label(&format!(
+              "{state_count} {} {} {value}{}",
+              if *state_count == 1 {"state has"} else {"states have"},
+              Num2Words::new(node_count as f32).lang(English).to_words().unwrap(),
+              if node_count == 1 { "" } else {"s"}
+            ));
+          }
+        }
+    });
+  }
 }
 impl super::Mode for Analyze {
 
@@ -86,6 +102,8 @@ impl super::Mode for Analyze {
     if let Some(state) = focused_states.get(self.viewing.val().saturating_sub(1)) {
       program.desired_state = *state;
     }
+
+    self.draw_analysis_window(ui.ctx());
   }
 
   fn interactions(&mut self, _program: &mut GraphProgram, response: Response) {
@@ -123,11 +141,9 @@ impl super::Mode for Analyze {
       self.viewing_type = (self.viewing_type + 1) % 4;
     }
 
-
   }
 
 }
-
 
 fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
   let mut out = Vec::with_capacity(a.len() + b.len());
@@ -135,5 +151,4 @@ fn combine<'a>(a: &'a [PackedState], b: &'a [PackedState]) -> Vec<PackedState> {
   out.extend_from_slice(b);
   out
 }
-
 
