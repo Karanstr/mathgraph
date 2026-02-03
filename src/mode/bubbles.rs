@@ -20,7 +20,7 @@ impl Bubbles {
 }
 impl super::Mode for Bubbles {
 
-  fn create(program: &mut GraphProgram) -> Self {
+  fn create(program: &GraphProgram) -> Self {
     
     let (bubble_idx, state_idx) = if let Some(state_space) = &program.state_space {
       state_space.bubble_data(program.loaded_state)

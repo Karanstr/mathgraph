@@ -9,9 +9,7 @@ pub struct AddRemove {
 }
 impl super::Mode for AddRemove {
 
-  fn create(program: &mut GraphProgram) -> Self {
-    program.state_space = None;
-    program.graph_changed = true;
+  fn create(_program: &GraphProgram) -> Self {
     Self {
       selected: None,
       clipboard: Clipboard::new(),

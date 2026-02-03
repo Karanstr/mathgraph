@@ -68,9 +68,6 @@ impl GraphProgram {
     self.graph_changed = true;
   }
 
-  // Revisit this, egui is far stronger so the hack I used for macroquad can likely be improved
-  // I almost certainly shouldn't be passing a mutable reference just to create a variant. Instead
-  // it should read to construct its internal state, then we should match and mutate on our side..
   fn set_mode(&mut self, ui: &mut Ui) {
     let mut new_mode = self.mode.as_int();
     ComboBox::from_label("Mode").selected_text(format!("{}", self.mode))
@@ -85,17 +82,21 @@ impl GraphProgram {
     ;
 
     if self.mode.as_int() == new_mode { return; }
-    let mode = Modes::new(self, new_mode);
+    let mode = Modes::new(&self, new_mode);
     self.mode = mode;
 
     if !matches!(&self.mode, Modes::AddRemove(_)) && self.state_space.is_none() {
+      
       self.state_space = StateData::new(&mut self.graph, self.max.val());
-     
       if let Some(state_space) = &self.state_space {
         self.loaded_state = state_space.parse_vec(self.graph.export_state());
         self.desired_state = self.loaded_state;
         self.graph_changed = true;
       }
+
+    } else if matches!(&self.mode, Modes::AddRemove(_)) && self.state_space.is_some() {
+      self.state_space = None;
+      self.graph_changed = true;
     }
 
   }

@@ -5,7 +5,7 @@ pub struct Set {
 }
 impl super::Mode for Set {
 
-  fn create(_program: &mut GraphProgram) -> Self {
+  fn create(_program: &GraphProgram) -> Self {
     Self { value: StrType::new(0) }
   }
 

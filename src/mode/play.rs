@@ -5,7 +5,7 @@ pub struct Play {
 }
 impl super::Mode for Play {
 
-  fn create(_program: &mut GraphProgram) -> Self {
+  fn create(_program: &GraphProgram) -> Self {
     Self {
       allow_clamping: true,
     }

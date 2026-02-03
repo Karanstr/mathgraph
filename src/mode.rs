@@ -11,7 +11,7 @@ use crate::{GraphProgram};
 
 trait Mode where Self: Sized {
 
-  fn create(_state_data: &mut GraphProgram) -> Self;
+  fn create(program: &GraphProgram) -> Self;
   fn ui(&mut self, _program: &mut GraphProgram, _ui: &mut Ui) {}
   fn tick(&mut self, _program: &mut GraphProgram) {}
   fn interactions(&mut self, _program: &mut GraphProgram, _response: Response) {}
@@ -43,7 +43,7 @@ impl std::fmt::Display for Modes {
 }
 impl Modes {
 
-  pub fn new(program: &mut GraphProgram, int: usize) -> Self {
+  pub fn new(program: &GraphProgram, int: usize) -> Self {
     match int {
       0 => Self::AddRemove(addremove::AddRemove::create(program)),
       1 => Self::Drag(drag::Drag::create(program)),
@@ -113,5 +113,4 @@ mod common {
   pub use eframe::egui::Ui;
   pub use crate::utilities::StrType;
   pub use eframe::egui::{Key, PointerButton, Response, TextEdit, Id};
-  // pub use crate::state::StateData;
 }

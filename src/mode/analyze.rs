@@ -30,7 +30,7 @@ impl Analyze {
 }
 impl super::Mode for Analyze {
 
-  fn create(program: &mut GraphProgram) -> Self {
+  fn create(program: &GraphProgram) -> Self {
 
     let (viewing_type, idx) = if let Some(state_space) = &program.state_space {
       let (classification, idx) = state_space.classification_data(program.loaded_state);
