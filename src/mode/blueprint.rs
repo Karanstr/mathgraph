@@ -1,12 +1,8 @@
-use std::num::NonZeroUsize;
-
 use super::common::*;
-use arboard::{Clipboard, Error as ClipError};
 use eframe::egui::{Color32, Event, LayerId, Order, Painter, Stroke};
 
 pub struct Blueprint {
   selected: Option<usize>,
-  clipboard: Result<Clipboard, ClipError>,
   action_cd: usize,
   can_drag: bool,
 }
@@ -15,28 +11,18 @@ impl super::Mode for Blueprint {
   fn create(_program: &GraphProgram) -> Self {
     Self {
       selected: None,
-      clipboard: Clipboard::new(),
       action_cd: 0,
       can_drag: false,
     }
   }
 
   fn ui(&mut self, program: &mut GraphProgram, ui: &mut Ui) {
-    let clipboard = match &mut self.clipboard {
-      Ok(clipboard) => clipboard,
-      Err(error) => {
-        ui.label(&error.to_string());
-        ui.label(&format!("Please try again!"));
-        self.clipboard = Clipboard::new();
-        return;
-      }
-    };
     
     ui.horizontal(|ui| {
       if ui.button("Save").clicked() {
         // there is certainly a cheaper solution, but atm not my problem
         program.graph.contiguize_and_trim();
-        clipboard.set_text( to_graph6( program.graph.get_neighbors() ) ).unwrap();
+        ui.ctx().copy_text( to_graph6( program.graph.get_neighbors() ) );
         self.action_cd = 300;
       }
       if self.action_cd > 0 {
@@ -128,6 +114,9 @@ impl super::Mode for Blueprint {
 /// - vertices are 0..n-1
 /// - no self-loops
 /// - undirected (i in adj[j] iff j in adj[i])
+
+// Visualizer which allows graph6 imports
+// https://houseofgraphs.org/draw_graph
 pub fn to_graph6(adj: Vec< Vec<usize> >) -> String {
   let n = adj.len();
   assert!(n <= 62, "This implementation supports n <= 62");
