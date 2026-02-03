@@ -72,12 +72,11 @@ impl GraphProgram {
     let mut new_mode = self.mode.as_int();
     ComboBox::from_label("Mode").selected_text(format!("{}", self.mode))
       .show_ui(ui, |ui| {
-        ui.selectable_value(&mut new_mode, 0, "Add/Remove");
-        ui.selectable_value(&mut new_mode, 1, "Drag");
-        ui.selectable_value(&mut new_mode, 2, "Play");
-        ui.selectable_value(&mut new_mode, 3, "Set");
-        ui.selectable_value(&mut new_mode, 4, "Analyze");
-        ui.selectable_value(&mut new_mode, 5, "Bubbles");
+        ui.selectable_value(&mut new_mode, 0, "Blueprint");
+        ui.selectable_value(&mut new_mode, 1, "Play");
+        ui.selectable_value(&mut new_mode, 2, "Set");
+        ui.selectable_value(&mut new_mode, 3, "Analyze");
+        ui.selectable_value(&mut new_mode, 4, "Bubbles");
       })
     ;
 
@@ -85,7 +84,7 @@ impl GraphProgram {
     let mode = Modes::new(&self, new_mode);
     self.mode = mode;
 
-    if !matches!(&self.mode, Modes::AddRemove(_)) && self.state_space.is_none() {
+    if !matches!(&self.mode, Modes::Blueprint(_)) && self.state_space.is_none() {
       
       self.state_space = StateData::new(&mut self.graph, self.max.val());
       if let Some(state_space) = &self.state_space {
@@ -94,7 +93,7 @@ impl GraphProgram {
         self.graph_changed = true;
       }
 
-    } else if matches!(&self.mode, Modes::AddRemove(_)) && self.state_space.is_some() {
+    } else if matches!(&self.mode, Modes::Blueprint(_)) && self.state_space.is_some() {
       self.state_space = None;
       self.graph_changed = true;
     }

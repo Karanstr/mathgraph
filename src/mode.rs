@@ -1,5 +1,4 @@
-mod addremove;
-mod drag;
+mod blueprint;
 mod play;
 mod set;
 mod analyze;
@@ -18,8 +17,7 @@ trait Mode where Self: Sized {
 
 }
 pub enum Modes {
-  AddRemove(addremove::AddRemove),
-  Drag(drag::Drag),
+  Blueprint(blueprint::Blueprint),
   Play(play::Play),
   Set(set::Set),
   Analyze(analyze::Analyze),
@@ -30,13 +28,12 @@ impl Default for Modes { fn default() -> Self { Self::SwapState } }
 impl std::fmt::Display for Modes {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let str = match self {
-      Self::AddRemove(_) => "Add/Remove",
-      Self::Drag(_) => "Drag",
+      Self::Blueprint(_) => "Blueprint",
       Self::Play(_) => "Play",
       Self::Set(_) => "Set",
       Self::Analyze(_) => "Analyze",
       Self::Bubbles(_) => "Bubbles",
-      Self::SwapState => "Invalid State!!"
+      Self::SwapState => "Invalid Mode!!"
     };
     write!(f, "{}", str)
   }
@@ -45,24 +42,22 @@ impl Modes {
 
   pub fn new(program: &GraphProgram, int: usize) -> Self {
     match int {
-      0 => Self::AddRemove(addremove::AddRemove::create(program)),
-      1 => Self::Drag(drag::Drag::create(program)),
-      2 => Self::Play(play::Play::create(program)),
-      3 => Self::Set(set::Set::create(program)),
-      4 => Self::Analyze(analyze::Analyze::create(program)),
-      5 => Self::Bubbles(bubbles::Bubbles::create(program)),
+      0 => Self::Blueprint(blueprint::Blueprint::create(program)),
+      1 => Self::Play(play::Play::create(program)),
+      2 => Self::Set(set::Set::create(program)),
+      3 => Self::Analyze(analyze::Analyze::create(program)),
+      4 => Self::Bubbles(bubbles::Bubbles::create(program)),
       _ => unreachable!()
     }
   }
   
   pub fn as_int(&self) -> usize {
     match self {
-      Self::AddRemove(_) => 0,
-      Self::Drag(_) => 1,
-      Self::Play(_)  => 2,
-      Self::Set(_) => 3,
-      Self::Analyze(_) => 4,
-      Self::Bubbles(_) => 5,
+      Self::Blueprint(_) => 0,
+      Self::Play(_)  => 1,
+      Self::Set(_) => 2,
+      Self::Analyze(_) => 3,
+      Self::Bubbles(_) => 4,
       Self::SwapState => unreachable!(),
     }
   }
@@ -72,8 +67,7 @@ impl Modes {
 
   pub fn ui(&mut self, program: &mut GraphProgram, ui: &mut Ui) {
     match self {
-      Self::AddRemove(inside) => inside.ui(program, ui),
-      Self::Drag(inside) => inside.ui(program, ui),
+      Self::Blueprint(inside) => inside.ui(program, ui),
       Self::Play(inside) => inside.ui(program, ui),
       Self::Set(inside) => inside.ui(program, ui),
       Self::Analyze(inside) => inside.ui(program, ui),
@@ -84,8 +78,7 @@ impl Modes {
 
   pub fn tick(&mut self, program: &mut GraphProgram) {
     match self {
-      Self::AddRemove(inside) => inside.tick(program),
-      Self::Drag(inside) => inside.tick(program),
+      Self::Blueprint(inside) => inside.tick(program),
       Self::Play(inside) => inside.tick(program),
       Self::Set(inside) => inside.tick(program),
       Self::Analyze(inside) => inside.tick(program),
@@ -96,8 +89,7 @@ impl Modes {
 
   pub fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
     match self {
-      Self::AddRemove(inside) => inside.interactions(program, response),
-      Self::Drag(inside) => inside.interactions(program, response),
+      Self::Blueprint(inside) => inside.interactions(program, response),
       Self::Play(inside) => inside.interactions(program, response),
       Self::Set(inside) => inside.interactions(program, response),
       Self::Analyze(inside) => inside.interactions(program, response),

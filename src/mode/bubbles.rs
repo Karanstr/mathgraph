@@ -81,17 +81,13 @@ impl super::Mode for Bubbles {
     let mut right_pressed = false;
     response.ctx.input(|input| {
       for event in &input.events {
-        match event {
-          Event::Key { key, pressed: true, repeat: false, .. } => {
-            match *key {
-              Key::ArrowDown => down_pressed = true,
-              Key::ArrowUp => up_pressed = true,
-              Key::ArrowLeft => left_pressed = true,
-              Key::ArrowRight => right_pressed = true,
-              _ => (),
-            }
-          }
-          _ => {}
+        let Event::Key { key, pressed: true, repeat: false, ..} = event else { continue; };
+        match *key {
+          Key::ArrowDown => down_pressed = true,
+          Key::ArrowUp => up_pressed = true,
+          Key::ArrowLeft => left_pressed = true,
+          Key::ArrowRight => right_pressed = true,
+          _ => (),
         }
       }
 

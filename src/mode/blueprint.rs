@@ -1,19 +1,21 @@
 use super::common::*;
 use arboard::{Clipboard, Error as ClipError};
-use eframe::egui::{Color32, LayerId, Order, Painter, Stroke};
+use eframe::egui::{Color32, Event, LayerId, Order, Painter, Stroke};
 
-pub struct AddRemove {
+pub struct Blueprint {
   selected: Option<usize>,
   clipboard: Result<Clipboard, ClipError>,
   action_cd: usize,
+  can_drag: bool,
 }
-impl super::Mode for AddRemove {
+impl super::Mode for Blueprint {
 
   fn create(_program: &GraphProgram) -> Self {
     Self {
       selected: None,
       clipboard: Clipboard::new(),
-      action_cd: 0
+      action_cd: 0,
+      can_drag: false,
     }
   }
 
@@ -39,6 +41,9 @@ impl super::Mode for AddRemove {
         ui.label("Copied to Clipboard!");
       }
     });
+  
+    ui.checkbox(&mut self.can_drag, "Drag (Space to Toggle)");
+
   }
 
   fn tick(&mut self, _program: &mut GraphProgram) {
@@ -46,10 +51,17 @@ impl super::Mode for AddRemove {
   }
 
   fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
+
     let Some(pos) = response.hover_pos() else { return };
     let hovering = program.get_node_at(pos);
 
     response.ctx.input(|input| {
+
+      // Toggle drag on space
+      for event in &input.events {
+        let Event::Key { key: Key::Space, pressed: true, repeat: false, ..} = event else { continue; };
+        self.can_drag = !self.can_drag;
+      }
 
       // Delete hovering on right click
       if input.pointer.secondary_down() {
@@ -59,6 +71,7 @@ impl super::Mode for AddRemove {
         }
       }
 
+      // Select/Create on left click
       if input.pointer.primary_pressed() {
         // Either we select the node we're hovering
         self.selected = hovering;
@@ -71,20 +84,26 @@ impl super::Mode for AddRemove {
       }
 
     }); 
-
-    // Draw line from selected node to mouse
-    if response.dragged_by(PointerButton::Primary) && let Some(node) = self.selected {
-      let origin = program.graph.nodes.get(node).unwrap().position;
-      let lines = Painter::new(response.ctx.clone(), LayerId::new(Order::Background, Id::new("Lines")), response.interact_rect);
-      lines.line_segment([pos, origin], Stroke::new(4., Color32::WHITE));
-    }
-    
-    if response.drag_stopped_by(PointerButton::Primary) {
-      if let Some(node1) = self.selected && let Some(node2) = hovering && node1 != node2 {
-        program.graph.attempt_unique_connection(node1, node2);
-        program.graph_changed = true;
+ 
+    if self.can_drag {
+      if response.dragged_by(PointerButton::Primary) && let Some(node) = self.selected {
+        program.graph.nodes.get_mut(node).unwrap().position = pos;
       }
-      self.selected = None;
+    } else {
+      // Draw line from selected node to mouse
+      if response.dragged_by(PointerButton::Primary) && let Some(node) = self.selected {
+        let origin = program.graph.nodes.get(node).unwrap().position;
+        let lines = Painter::new(response.ctx.clone(), LayerId::new(Order::Background, Id::new("Lines")), response.interact_rect);
+        lines.line_segment([pos, origin], Stroke::new(4., Color32::WHITE));
+      }
+      
+      if response.drag_stopped_by(PointerButton::Primary) {
+        if let Some(node1) = self.selected && let Some(node2) = hovering && node1 != node2 {
+          program.graph.attempt_unique_connection(node1, node2);
+          program.graph_changed = true;
+        }
+        self.selected = None;
+      }
     }
   }
 
