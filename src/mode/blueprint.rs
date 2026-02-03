@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use super::common::*;
 use arboard::{Clipboard, Error as ClipError};
 use eframe::egui::{Color32, Event, LayerId, Order, Painter, Stroke};
@@ -90,20 +92,29 @@ impl super::Mode for Blueprint {
         program.graph.nodes.get_mut(node).unwrap().position = pos;
       }
     } else {
+
       // Draw line from selected node to mouse
       if response.dragged_by(PointerButton::Primary) && let Some(node) = self.selected {
+        let line_color = if let Some(hovering) = hovering 
+          && program.graph.has_connection(node, hovering) 
+        { Color32::RED } else { Color32:: WHITE };
         let origin = program.graph.nodes.get(node).unwrap().position;
         let lines = Painter::new(response.ctx.clone(), LayerId::new(Order::Background, Id::new("Lines")), response.interact_rect);
-        lines.line_segment([pos, origin], Stroke::new(4., Color32::WHITE));
+        lines.line_segment([pos, origin], Stroke::new(4., line_color));
       }
       
       if response.drag_stopped_by(PointerButton::Primary) {
         if let Some(node1) = self.selected && let Some(node2) = hovering && node1 != node2 {
-          program.graph.attempt_unique_connection(node1, node2);
+          // If we fail to add unique connection, remove the existing one.
+          if !program.graph.attempt_unique_connection(node1, node2) {
+            program.graph.remove_connection(node1, node2);
+
+          };
           program.graph_changed = true;
         }
         self.selected = None;
       }
+
     }
   }
 

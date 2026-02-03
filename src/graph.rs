@@ -12,11 +12,27 @@ impl Graph {
   }
 
   /// Adds neighbors if not neighbors already, otherwise does nothing
+  /// True on success, false on failure
   pub fn attempt_unique_connection(&mut self, node1: usize, node2: usize) -> bool {
     if self.nodes.is_occupied(node1) && self.nodes.is_occupied(node2) {
-      self.nodes.get_mut(node1).unwrap().add_unique_neighbor(node2);
-      self.nodes.get_mut(node2).unwrap().add_unique_neighbor(node1);
+      if !self.nodes.get_mut(node1).unwrap().add_unique_neighbor(node2) { return false };
+      if !self.nodes.get_mut(node2).unwrap().add_unique_neighbor(node1) { return false };
       true
+    } else { false }
+  }
+
+  pub fn remove_connection(&mut self, node1: usize, node2: usize) -> bool {
+    if self.nodes.is_occupied(node1) && self.nodes.is_occupied(node2) {
+      if !self.nodes.get_mut(node1).unwrap().remove_neighbor(node2) { return false };
+      if !self.nodes.get_mut(node2).unwrap().remove_neighbor(node1) { return false };
+      true
+    } else { false }
+  }
+
+  // Is there a connection from node1 to node2
+  pub fn has_connection(&self, node1: usize, node2: usize) -> bool {
+    if let Some(node) = self.nodes.get(node1) {
+      node.has_neighbor(node2)
     } else { false }
   }
 
@@ -102,10 +118,26 @@ impl Node {
     }
   }
 
-  pub fn add_unique_neighbor(&mut self, neighbor: usize) {
+  pub fn has_neighbor(&self, neighbor: usize) -> bool {
+    self.neighbors.contains(&neighbor)
+  } 
+
+  /// True if neighbors added, false if neighbor already existed
+  pub fn add_unique_neighbor(&mut self, neighbor: usize) -> bool {
     if !self.neighbors.contains(&neighbor) {
       self.neighbors.push(neighbor);
-    }
+      true
+    } else { false }
+  }
+
+  pub fn remove_neighbor(&mut self, neighbor: usize) -> bool {
+    let remaining = self.neighbors.clone().into_iter().filter(|&element| {
+      element != neighbor
+    }).collect::<Vec<usize>>();
+    if remaining.len() == self.neighbors.len() { return false }
+
+    self.neighbors = remaining;
+    true
   }
 
 }
