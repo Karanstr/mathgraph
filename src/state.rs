@@ -98,7 +98,7 @@ impl StateData {
 }
 impl StateData {
   fn generate_valid(&mut self) {
-    for state in self.dfs(0, true) {
+    for state in self.dfs(0, false) {
       self.track_unique_state(state, Classification::Valid);
     }
   }
@@ -165,7 +165,7 @@ impl StateData {
 
     for initial_state in self.meta.keys() {
       if seen_states.contains(initial_state) { continue }
-      let mut bubble = self.dfs(*initial_state, false);
+      let mut bubble = self.dfs(*initial_state, true);
       if bubble.len() == 1 { 
         smol_bubbles.extend(bubble.drain());
         continue;
@@ -192,7 +192,7 @@ impl StateData {
   
   }
 
-  fn dfs(&self, initial_state: PackedState, saturate: bool) -> AHashSet<PackedState> {
+  fn dfs(&self, initial_state: PackedState, reversible_only: bool) -> AHashSet<PackedState> {
     let count = self.neighbors.len();
     let mut stack = vec![(initial_state, 0u8)];
     let mut found_states = AHashSet::new();
@@ -204,7 +204,7 @@ impl StateData {
       // We want to apply a value of -1 if op_idx & 1 == 0 and 1 if op_idx & 1 == 1
       let operation = -1 + (op_idx & 0b1) as i8 * 2;
       
-      if let Some(new_state) = self.splash_state(state, center_idx, operation, saturate) {
+      if let Some(new_state) = self.splash_state(state, center_idx, operation, reversible_only) {
         if found_states.insert(new_state.clone()) { stack.push((new_state, 0)) }
       } else { continue 'search }
 
@@ -218,12 +218,12 @@ impl StateData {
     mut state: PackedState,
     center: usize,
     operation: i8,
-    allow_clamping: bool,
+    reversible_only: bool,
   ) -> Option<PackedState> {
     for idx in self.neighbors[center].iter().chain(&[center]) {
       let old_node = StateOps::get(state, *idx, self.base, self.length());
       let new_node = old_node.saturating_add_signed(operation).min(self.base - 1);
-      if old_node == new_node && !allow_clamping { return None }
+      if old_node == new_node && reversible_only { return None }
       state = StateOps::set(state, *idx, new_node, self.base, self.length());
     }
     Some(state)

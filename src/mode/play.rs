@@ -1,18 +1,18 @@
 use super::common::*;
 
 pub struct Play { 
-  allow_clamping: bool,
+  reversible_only: bool,
 }
 impl super::Mode for Play {
 
   fn create(_program: &GraphProgram) -> Self {
     Self {
-      allow_clamping: true,
+      reversible_only: true,
     }
   }
 
   fn ui(&mut self, _program: &mut GraphProgram, ui: &mut Ui) {
-    ui.checkbox(&mut self.allow_clamping, "Allow Clamping");
+    ui.checkbox(&mut self.reversible_only, "Reversible Only");
   }
 
   fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
@@ -25,11 +25,11 @@ impl super::Mode for Play {
     if let Some(node) = program.get_node_at(response.ctx.pointer_interact_pos().unwrap())
       && let Some(state_space) = &program.state_space
       && let Some(state) = state_space.splash_state(
-          program.loaded_state,
-          node,
-          delta,
-          self.allow_clamping
-        )
+        program.loaded_state,
+        node,
+        delta,
+        self.reversible_only
+      )
     {
       program.desired_state = state;
     }
