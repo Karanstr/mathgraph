@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use crate::{NODE_RADIUS, graph::Graph};
 
 use super::common::*;
-use eframe::egui::{Align2, Area, Color32, Context, DragValue, Event, FontId, LayerId, Order, Painter, Pos2, Rect, RichText, Stroke, TextStyle, Vec2, Widget, Window};
+use eframe::egui::{Align2, Area, Color32, Context, DragValue, Event, FontId, LayerId, Order, Painter, Pos2, Rect, RichText, Stroke, Vec2, Widget, Window};
 
 pub struct Blueprint {
   selected: Option<usize>,

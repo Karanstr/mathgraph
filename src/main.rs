@@ -2,7 +2,7 @@ mod graph; mod state; mod utilities; mod mode;
 
 use std::mem::take;
 use eframe::App;
-use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, TextEdit, Ui, Window};
+use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, TextEdit, Ui, Visuals, Window};
 use graph::Graph;
 use state::*;
 use utilities::*;
@@ -189,6 +189,7 @@ impl GraphProgram {
 }
 impl App for GraphProgram {
   fn update(&mut self, ctx: &eframe::egui::Context, _: &mut eframe::Frame) {
+    ctx.set_visuals(Visuals::dark());
     let mut mode = take(&mut self.mode);
     mode.tick(self);
     self.mode = mode;
@@ -202,7 +203,7 @@ impl App for GraphProgram {
 
 fn main() {
   let mut native_options = eframe::NativeOptions::default();
-  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.0");
+  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.1");
   let _ = eframe::run_native(
     "GraphAnalysis",
     native_options,
