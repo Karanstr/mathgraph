@@ -40,10 +40,7 @@ impl super::Mode for Bubbles {
 
     let old_bubble_idx = self.bubble.val();
     ui.horizontal(|ui| {
-      TextEdit::singleline(self.bubble.string_mut())
-        .id(Id::new("Bubble"))
-        .show(ui)
-      ;
+      TextEdit::singleline(self.bubble.string_mut()).desired_width(92.0).show(ui);
       ui.label(format!("/{} Viewed Bubbles", self.bubble_length));
     });
     self.bubble.parse();
@@ -56,10 +53,7 @@ impl super::Mode for Bubbles {
     self.state_length = bubble_vec.len();
 
     ui.horizontal(|ui| {
-      TextEdit::singleline(self.state.string_mut())
-        .id(Id::new("State"))
-        .show(ui)
-      ;
+      TextEdit::singleline(self.state.string_mut()).desired_width(92.0).show(ui);
       ui.label(format!("/{} Viewed States", self.state_length));
     });
     self.state.parse();

@@ -13,7 +13,7 @@ pub struct Analyze {
 impl Analyze {
   fn draw_analysis_window(&self, ctx: &Context) {
     Window::new("Analysis")
-      .default_pos(Pos2::new(0., 150.))
+      .default_pos(Pos2::new(15., 200.))
       .show(ctx, |ui| {
         for (value, values) in self.parsed_analysis.iter().enumerate() {
           for (node_count, state_count) in values.iter().enumerate() {
@@ -50,15 +50,12 @@ impl super::Mode for Analyze {
 
     let Some(state_space) = program.state_space.as_ref() else { return };
 
-    let total = (state_space.base as usize).pow(state_space.length() as u32);
-    ui.label(&format!("{total} Total"));
-
     // Identify view type
     let old_type = self.viewing_type;
     let names = [
       "All Invalid",
       "Bad States",
-      "NotBad States",
+      "Other States",
       "All Valid",
     ];
     ComboBox::from_label("Type").selected_text(format!("{}", names[old_type]))
@@ -84,10 +81,8 @@ impl super::Mode for Analyze {
 
     // Identify view idx
     ui.horizontal(|ui| {
-      TextEdit::singleline(self.viewing.string_mut())
-        .id(Id::new("Viewing"))
-        .show(ui)
-      ;
+
+      TextEdit::singleline(self.viewing.string_mut()).desired_width(92.0).show(ui);
       self.viewing.parse();
 
       ui.label(format!("/{} Viewed States", self.viewing_length));
@@ -102,6 +97,9 @@ impl super::Mode for Analyze {
     if let Some(state) = focused_states.get(self.viewing.val().saturating_sub(1)) {
       program.desired_state = *state;
     }
+
+    let total = (state_space.base as usize).pow(state_space.length() as u32);
+    ui.label(&format!("{total} Total State Count"));
 
     self.draw_analysis_window(ui.ctx());
   }

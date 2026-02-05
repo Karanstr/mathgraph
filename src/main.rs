@@ -2,7 +2,7 @@ mod graph; mod state; mod utilities; mod mode;
 
 use std::mem::take;
 use eframe::App;
-use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, Ui, Window};
+use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, TextEdit, Ui, Window};
 use graph::Graph;
 use state::*;
 use utilities::*;
@@ -55,7 +55,10 @@ impl GraphProgram {
   // I don't like directly touching the graph like this, but if I don't then max can't be changed
   // during add/remove (or I need edgecases)
   fn handle_max(&mut self, ui: &mut Ui) {
-    ui.text_edit_singleline(self.max.string_mut());
+    ui.horizontal(|ui| {
+      TextEdit::singleline(self.max.string_mut()).char_limit(1).desired_width(92.0).show(ui);
+      ui.label("Max");
+    });
     let old_max = self.max.val();
     if old_max == self.max.parse() { return; }
     
