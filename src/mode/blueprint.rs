@@ -1,10 +1,94 @@
+use std::ops::RangeInclusive;
+
+use crate::{NODE_RADIUS, graph::Graph};
+
 use super::common::*;
-use eframe::egui::{Color32, Event, LayerId, Order, Painter, Stroke};
+use eframe::egui::{Align2, Area, Color32, Context, DragValue, Event, FontId, LayerId, Order, Painter, Pos2, Rect, RichText, Stroke, TextStyle, Vec2, Widget, Window};
 
 pub struct Blueprint {
   selected: Option<usize>,
   action_cd: usize,
+  action: usize, // 1 is save, 2 is load
   can_drag: bool,
+
+  loading_screen: bool,
+  load_n: usize,
+}
+impl Blueprint {
+  fn load_menu(&mut self, program: &mut GraphProgram, ctx: &Context) {
+    Area::new(Id::new("Dimming"))
+      .order(Order::Foreground)
+      .interactable(true)
+      .show(ctx, |ui| {
+        let screen_rect = ctx.content_rect();
+
+        ui.painter().rect_filled(
+          screen_rect,
+          0.0,
+          Color32::from_black_alpha(150),
+        );
+      })
+    ;
+
+    Window::new("Load")
+      .anchor(Align2::CENTER_CENTER, [0.0, -100.0])
+      .collapsible(false)
+      .resizable(false)
+      .order(Order::Tooltip)
+      .title_bar(false)
+      .show(ctx, |ui| {
+        ui.style_mut().override_font_id = Some(FontId::proportional(20.));
+        ui.vertical_centered(|ui| {
+          ui.label(RichText::new("Load Options").size(30.).strong());
+          
+          DragValue::new(&mut self.load_n)
+            .range(RangeInclusive::new(1, 15))
+            .speed(0.1)
+            .ui(ui)
+          ;
+
+          if ui.button("Path").clicked() {
+            program.graph = GraphType::Path(self.load_n).new(ctx.content_rect());
+            program.graph_changed = true;
+            self.loading_screen = false;
+          }
+
+          if ui.button("Cycle").clicked() {
+            program.graph = GraphType::Cycle(self.load_n).new(ctx.content_rect());
+            program.graph_changed = true;
+            self.loading_screen = false;
+          }
+
+          if ui.button("Complete").clicked() {
+            program.graph = GraphType::Complete(self.load_n).new(ctx.content_rect());
+            program.graph_changed = true;
+            self.loading_screen = false;
+          }
+
+          if ui.button("Wheel").clicked() {
+            program.graph = GraphType::Wheel(self.load_n).new(ctx.content_rect());
+            program.graph_changed = true;
+            self.loading_screen = false;
+          }
+
+          if ui.button("Star").clicked() {
+            program.graph = GraphType::Star(self.load_n).new(ctx.content_rect());
+            program.graph_changed = true;
+            self.loading_screen = false;
+          }
+
+          if ui.button("Cancel").clicked() {
+            self.loading_screen = false;
+          }
+
+        });
+        
+
+      })
+    ;
+
+  }
+
 }
 impl super::Mode for Blueprint {
 
@@ -12,25 +96,38 @@ impl super::Mode for Blueprint {
     Self {
       selected: None,
       action_cd: 0,
+      action: 0,
       can_drag: false,
+
+      loading_screen: false,
+      load_n: 1,
     }
   }
 
   fn ui(&mut self, program: &mut GraphProgram, ui: &mut Ui) {
+    if self.loading_screen { self.load_menu(program, ui.ctx()); return } 
     
+    ui.checkbox(&mut self.can_drag, "Drag (Space to Toggle)");
+
     ui.horizontal(|ui| {
       if ui.button("Save").clicked() {
         // there is certainly a cheaper solution, but atm not my problem
         program.graph.contiguize_and_trim();
         ui.ctx().copy_text( to_graph6( program.graph.get_neighbors() ) );
         self.action_cd = 300;
+        self.action = 1;
       }
-      if self.action_cd > 0 {
-        ui.label("Copied to Clipboard!");
-      }
+      if ui.button("Load").clicked() { self.loading_screen = true }
     });
-  
-    ui.checkbox(&mut self.can_drag, "Drag (Space to Toggle)");
+    
+    if self.action_cd > 0 {
+      let message = match self.action {
+        1 => "Copied to Clipboard!",
+        2 => "Loaded!",
+        _ => unimplemented!()
+      };
+      ui.label(message);
+    } else { self.action = 0; }
 
   }
 
@@ -39,6 +136,7 @@ impl super::Mode for Blueprint {
   }
 
   fn interactions(&mut self, program: &mut GraphProgram, response: Response) {
+    if self.loading_screen { return }
 
     let Some(pos) = response.hover_pos() else { return };
     let hovering = program.get_node_at(pos);
@@ -106,6 +204,106 @@ impl super::Mode for Blueprint {
 
 }
 
+enum GraphType {
+  Path(usize),
+  Cycle(usize),
+  Complete(usize),
+  Wheel(usize),
+  Star(usize),
+}
+impl GraphType {
+  // Add a max size to prevent from going off screen
+  fn new(self, space: Rect) -> Graph {
+    let mut graph = Graph::new();
+    match self {
+      Self::Path(n) => {
+        let node_size = NODE_RADIUS * 3.;
+        let step = Vec2::new(node_size, 0.);
+        let start= space.center() - Vec2::new((node_size * n as f32 - 1.) / 2., 0.);
+        let mut cur_pos = start;
+
+        graph.add_node(cur_pos);
+        if n == 1 { return graph }
+        graph.unchecked_directed_connection(0, 1);
+
+        cur_pos += step;
+        for i in 1 .. n - 1 {
+          graph.add_node(cur_pos);
+          graph.unchecked_directed_connection(i, i + 1);
+          graph.unchecked_directed_connection(i, i - 1);
+          cur_pos += step;
+        }
+        graph.add_node(cur_pos);
+        graph.unchecked_directed_connection(n - 1, 0);
+      }
+      Self::Cycle(n) => {
+        let big_radius = NODE_RADIUS * n as f32;
+        let points = points_on_circle(n, space.center(), big_radius);
+        for point in points {
+          graph.add_node(point);
+        }
+        for i in 1 .. n - 1 {
+          graph.attempt_unique_connection(i, (i + 1) % n);
+          graph.attempt_unique_connection(i, i - 1);
+        }
+        graph.attempt_unique_connection(0, n - 1);
+      }
+      Self::Complete(n) => {
+        let big_radius = NODE_RADIUS * n as f32;
+        let points = points_on_circle(n, space.center(), big_radius);
+        for point in points {
+          graph.add_node(point);
+        }
+        for i in 0 .. n {
+          for j in 0 .. n {
+            // Not optimal but fast :sunglasses:
+            graph.attempt_unique_connection(i, j);
+          }
+        }
+        graph.attempt_unique_connection(0, n - 1);
+      }
+      Self::Wheel(n) => {
+        graph.add_node(space.center());
+        let big_radius = (NODE_RADIUS * n as f32).max(200.);
+        let points = points_on_circle(n, space.center(), big_radius);
+        for point in points {
+          graph.add_node(point);
+        }
+        // This logic feels wrong but it works
+        for i in 1 .. n + 1 {
+          graph.attempt_unique_connection(i, (i + 1) % n);
+          graph.attempt_unique_connection(i, i - 1);
+          graph.attempt_unique_connection(0, i);
+        }
+        graph.attempt_unique_connection(1, n);
+      }
+      Self::Star(n) => {
+        graph.add_node(space.center());
+        let big_radius = (NODE_RADIUS * n as f32).max(200.);
+        let points = points_on_circle(n, space.center(), big_radius);
+        for point in points { graph.add_node(point); }
+        for i in 1 .. n + 1 {
+          graph.attempt_unique_connection(0, i);
+        }
+      }
+    };
+    graph
+  }
+}
+
+
+
+use std::f32::consts::TAU; // TAU = 2π
+
+fn points_on_circle( n: usize, center: Pos2, radius: f32) -> Vec<Pos2> {
+  (0..n).map(|i| {
+    let theta = TAU * i as f32 / n as f32;
+    Pos2::new(
+      center.x + radius * theta.cos(),
+      center.y + radius * theta.sin(),
+    )
+  }).collect()
+}
 
 /// Serialize an undirected simple graph into graph6 format.
 /// 

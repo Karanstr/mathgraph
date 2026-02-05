@@ -21,6 +21,12 @@ impl Graph {
     } else { false }
   }
 
+  pub fn unchecked_directed_connection(&mut self, node1: usize, node2: usize) -> bool {
+    if let Some(node) = self.nodes.get_mut(node1) {
+      node.add_unique_neighbor(node2); true
+    } else { false }
+  }
+
   pub fn remove_connection(&mut self, node1: usize, node2: usize) -> bool {
     if self.nodes.is_occupied(node1) && self.nodes.is_occupied(node2) {
       if !self.nodes.get_mut(node1).unwrap().remove_neighbor(node2) { return false };

@@ -100,6 +100,8 @@ impl GraphProgram {
       self.state_space = None;
       self.graph_changed = true;
     }
+    // THIS IS A REALLY STUPID HACK BUT I'M IN FEATURE MODE, NOT BUGFIX MODE RN!!!!! HACK
+    self.mode = Modes::new(&self, new_mode);
 
   }
 
@@ -200,7 +202,7 @@ impl App for GraphProgram {
 
 fn main() {
   let mut native_options = eframe::NativeOptions::default();
-  native_options.viewport = native_options.viewport.with_title("Graph Application v3.2.0");
+  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.0");
   let _ = eframe::run_native(
     "GraphAnalysis",
     native_options,
