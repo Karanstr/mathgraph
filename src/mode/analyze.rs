@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use eframe::egui::{ComboBox, Context, Event, Pos2, Window};
 use num2words::{Num2Words, Lang::English};
 
@@ -7,7 +9,7 @@ use crate::state::{PackedState, Classification, frequency_analysis, parse_analys
 pub struct Analyze {
   viewing_type: usize,
   viewing_length: usize,
-  viewing: StrType<usize>,
+  viewing: usize,
   parsed_analysis: Vec<Vec<u32>>,
 }
 impl Analyze {
@@ -41,7 +43,7 @@ impl super::Mode for Analyze {
       viewing_type,
       viewing_length: 0,
       // Wow I hate that I did this off by one nonsense
-      viewing: StrType::new(idx + 1),
+      viewing: idx + 1,
       parsed_analysis: Vec::new(),
     }
   }
@@ -54,8 +56,8 @@ impl super::Mode for Analyze {
     let old_type = self.viewing_type;
     let names = [
       "All Invalid",
-      "Bad States",
-      "Other States",
+      "Lonely States",
+      "Other Invalid",
       "All Valid",
     ];
     ComboBox::from_label("Type").selected_text(format!("{}", names[old_type]))
@@ -81,20 +83,21 @@ impl super::Mode for Analyze {
 
     // Identify view idx
     ui.horizontal(|ui| {
-
-      TextEdit::singleline(self.viewing.string_mut()).desired_width(92.0).show(ui);
-      self.viewing.parse();
-
+      DragValue::new(&mut self.viewing)
+        .range(RangeInclusive::new(1, self.viewing_length))
+        .speed(0.1)
+        .ui(ui)
+      ;
       ui.label(format!("/{} Viewed States", self.viewing_length));
     });
 
     if self.parsed_analysis.is_empty() || old_type != self.viewing_type {
-      let analysis = frequency_analysis(focused_states, state_space.length(), program.max.val());
-      self.parsed_analysis = parse_analysis(analysis, program.max.val(), state_space.length() as u8);
+      let analysis = frequency_analysis(focused_states, state_space.length(), program.max);
+      self.parsed_analysis = parse_analysis(analysis, program.max, state_space.length() as u8);
     }
 
     // Load current viewing state
-    if let Some(state) = focused_states.get(self.viewing.val().saturating_sub(1)) {
+    if let Some(state) = focused_states.get(self.viewing.saturating_sub(1)) {
       program.desired_state = *state;
     }
 
@@ -123,8 +126,19 @@ impl super::Mode for Analyze {
       }
     });
   
-    if self.viewing_length != 0 && (right_pressed || left_pressed) {
-      self.viewing.step_strnum(self.viewing_length, 1, right_pressed);
+    if self.viewing_length != 0 {
+      if right_pressed {
+        self.viewing = self.viewing % self.viewing_length + 1;
+      }
+      if left_pressed {
+        self.viewing = 
+          if self.viewing == 1 || self.viewing > self.viewing_length { 
+            self.viewing_length
+          }
+          else { self.viewing - 1 }
+        ;
+      }
+
     }
     
     if up_pressed {

@@ -1,11 +1,11 @@
-mod graph; mod state; mod utilities; mod mode;
+mod graph; mod state; mod mode;
 
 use std::mem::take;
+use std::ops::RangeInclusive;
 use eframe::App;
-use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, TextEdit, Ui, Visuals, Window};
+use eframe::egui::{Align2, CentralPanel, Color32, ComboBox, Context, DragValue, FontId, Id, LayerId, Order, Painter, Pos2, Sense, Stroke, Ui, Visuals, Widget, Window};
 use graph::Graph;
 use state::*;
-use utilities::*;
 
 use crate::mode::Modes;
 
@@ -15,7 +15,7 @@ struct GraphProgram {
   graph: Graph,
   state_space: Option<StateData>,
   mode: Modes,
-  max: StrType<u8>,
+  max: u8,
   graph_changed: bool,
 
   loaded_state: PackedState,
@@ -27,7 +27,7 @@ impl GraphProgram {
       state_space: None,
       graph: Graph::new(),
       mode: Modes::default(),
-      max: StrType::new(2),
+      max: 2,
       graph_changed: false,
 
       loaded_state: 0,
@@ -55,16 +55,19 @@ impl GraphProgram {
   // I don't like directly touching the graph like this, but if I don't then max can't be changed
   // during add/remove (or I need edgecases)
   fn handle_max(&mut self, ui: &mut Ui) {
+    let old_max = self.max;
     ui.horizontal(|ui| {
-      TextEdit::singleline(self.max.string_mut()).char_limit(1).desired_width(92.0).show(ui);
+      
+      DragValue::new(&mut self.max).range(RangeInclusive::new(0, 9)).ui(ui);
       ui.label("Max");
     });
-    let old_max = self.max.val();
-    if old_max == self.max.parse() { return; }
+    if old_max == self.max { return; }
     
-    self.graph.correct_max(self.max.val());
+    // Right here is my complaint
+    self.graph.correct_max(self.max);
+    
     if let Some(state_space) = &mut self.state_space {
-      *state_space = StateData::new(&mut self.graph, self.max.val()).unwrap();
+      *state_space = StateData::new(&mut self.graph, self.max).unwrap();
       self.loaded_state = state_space.parse_vec(self.graph.export_state());
       self.desired_state = self.loaded_state;
     }
@@ -89,7 +92,7 @@ impl GraphProgram {
 
     if !matches!(&self.mode, Modes::Blueprint(_)) && self.state_space.is_none() {
       
-      self.state_space = StateData::new(&mut self.graph, self.max.val());
+      self.state_space = StateData::new(&mut self.graph, self.max);
       if let Some(state_space) = &self.state_space {
         self.loaded_state = state_space.parse_vec(self.graph.export_state());
         self.desired_state = self.loaded_state;

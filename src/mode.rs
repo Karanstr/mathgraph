@@ -103,6 +103,5 @@ impl Modes {
 mod common {
   pub(crate) use crate::GraphProgram;
   pub use eframe::egui::Ui;
-  pub use crate::utilities::StrType;
-  pub use eframe::egui::{Key, PointerButton, Response, TextEdit, Id};
+  pub use eframe::egui::{Key, PointerButton, Response, DragValue, Widget, Id};
 }
