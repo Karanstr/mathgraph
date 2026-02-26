@@ -207,7 +207,7 @@ impl App for GraphProgram {
 
 fn main() {
   let mut native_options = eframe::NativeOptions::default();
-  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.2");
+  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.3");
   let _ = eframe::run_native(
     "GraphAnalysis",
     native_options,
