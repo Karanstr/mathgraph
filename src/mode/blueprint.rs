@@ -5,6 +5,7 @@ use crate::{NODE_RADIUS, graph::Graph};
 use super::common::*;
 use eframe::egui::{Align2, Area, Color32, Context, Event, FontId, LayerId, Order, Painter, Pos2, Rect, RichText, Stroke, Vec2, Window};
 
+#[derive(Debug)]
 pub struct Blueprint {
   selected: Option<usize>,
   action_cd: usize,

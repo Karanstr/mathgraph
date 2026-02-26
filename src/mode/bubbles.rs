@@ -5,6 +5,7 @@ use eframe::egui::Event;
 use super::common::*;
 use crate::state::PackedState;
 
+#[derive(Debug)]
 pub struct Bubbles {
   bubble: usize,
   bubble_length: usize,
@@ -13,26 +14,30 @@ pub struct Bubbles {
 }
 impl Bubbles {
   pub fn assign_self(&mut self, program: &mut GraphProgram, state: PackedState) {
-    let (bubble_idx, state_idx) = if let Some(state_space) = &program.state_space {
-      state_space.bubble_data(state)
-    } else { (0, 0) };
+    let (bubble_idx, state_idx, state_length) = if let Some(state_space) = &program.state_space {
+      let (bubble_idx, state_idx) = state_space.bubble_data(state);
+      let state_len = state_space.bubbles[bubble_idx].len();
+      (bubble_idx, state_idx, state_len)
+    } else { (0, 0, 0) };
     self.bubble = bubble_idx + 1;
     self.state = state_idx + 1;
+    self.state_length = state_length;
   }
 }
 impl super::Mode for Bubbles {
 
   fn create(program: &GraphProgram) -> Self {
     
-    let (bubble_idx, state_idx) = if let Some(state_space) = &program.state_space {
-      state_space.bubble_data(program.loaded_state)
-    } else { (0, 0) };
-
+    let (bubble_idx, bubble_len, state_idx, state_len) = if let Some(state_space) = &program.state_space {
+      let (bubble_idx, state_idx) = state_space.bubble_data(program.loaded_state);
+      let state_len = state_space.bubbles[bubble_idx].len();
+      (bubble_idx, state_space.bubbles.len(), state_idx, state_len)
+    } else { (0, 0, 0, 0) };
     Self {
       bubble: bubble_idx + 1,
-      bubble_length: 0,
+      bubble_length: bubble_len,
       state: state_idx + 1,
-      state_length: 0,
+      state_length: state_len,
     }
   }
 
@@ -51,7 +56,7 @@ impl super::Mode for Bubbles {
     if self.bubble != old_bubble_idx { self.state = 1; }
     self.bubble_length = state_space.bubbles.len();
 
-    let Some(bubble_vec) = state_space.bubbles.get(self.bubble.saturating_sub(1)) else {
+    let Some(bubble_vec) = state_space.bubbles.get(self.bubble - 1) else {
       return;
     };
     self.state_length = bubble_vec.len();
@@ -68,7 +73,7 @@ impl super::Mode for Bubbles {
     }
 
     // Load current viewing state
-    if let Some(state) = bubble_vec.get(self.state.saturating_sub(1)) {
+    if let Some(state) = bubble_vec.get(self.state - 1) {
       program.desired_state = *state;
     }
   }
@@ -127,10 +132,10 @@ impl super::Mode for Bubbles {
 
 
     if self.bubble_length != 0 {
-      if right_pressed {
+      if up_pressed {
         self.bubble = self.bubble % self.bubble_length + 1;
       }
-      if left_pressed {
+      if down_pressed {
         self.bubble = 
           if self.bubble == 1 || self.bubble > self.bubble_length { 
             self.bubble_length

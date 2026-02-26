@@ -1,5 +1,6 @@
 use super::common::*;
 
+#[derive(Debug)]
 pub struct Set {
   value: u8 
 }

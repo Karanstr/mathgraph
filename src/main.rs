@@ -87,10 +87,9 @@ impl GraphProgram {
     ;
 
     if self.mode.as_int() == new_mode { return; }
-    let mode = Modes::new(&self, new_mode);
-    self.mode = mode;
 
-    if !matches!(&self.mode, Modes::Blueprint(_)) && self.state_space.is_none() {
+    // If new mode isn't blueprint
+    if new_mode != 0 && self.state_space.is_none() {
       
       self.state_space = StateData::new(&mut self.graph, self.max);
       if let Some(state_space) = &self.state_space {
@@ -99,12 +98,15 @@ impl GraphProgram {
         self.graph_changed = true;
       }
 
-    } else if matches!(&self.mode, Modes::Blueprint(_)) && self.state_space.is_some() {
+           // New mode is blueprint
+    } else if new_mode == 0 && self.state_space.is_some() {
       self.state_space = None;
       self.graph_changed = true;
     }
-    // THIS IS A REALLY STUPID HACK BUT I'M IN FEATURE MODE, NOT BUGFIX MODE RN!!!!! HACK
+
+    // We have to construct the mode after updating state_space
     self.mode = Modes::new(&self, new_mode);
+    dbg!(&self.mode);
 
   }
 
@@ -206,7 +208,7 @@ impl App for GraphProgram {
 
 fn main() {
   let mut native_options = eframe::NativeOptions::default();
-  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.1");
+  native_options.viewport = native_options.viewport.with_title("Graph Application v3.3.2");
   let _ = eframe::run_native(
     "GraphAnalysis",
     native_options,

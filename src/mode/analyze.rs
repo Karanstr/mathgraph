@@ -6,6 +6,7 @@ use num2words::{Num2Words, Lang::English};
 use super::common::*;
 use crate::state::{PackedState, Classification, frequency_analysis, parse_analysis};
 
+#[derive(Debug)]
 pub struct Analyze {
   viewing_type: usize,
   viewing_length: usize,
@@ -33,11 +34,10 @@ impl Analyze {
 impl super::Mode for Analyze {
 
   fn create(program: &GraphProgram) -> Self {
-
     let (viewing_type, idx) = if let Some(state_space) = &program.state_space {
       let (classification, idx) = state_space.classification_data(program.loaded_state);
       (classification as usize, idx)
-    } else { (0, 1) };
+    } else { (3, 0) };
 
     Self {
       viewing_type,
@@ -55,10 +55,10 @@ impl super::Mode for Analyze {
     // Identify view type
     let old_type = self.viewing_type;
     let names = [
-      "All Invalid",
+      "All Valid",
       "Lonely States",
       "Other Invalid",
-      "All Valid",
+      "All Invalid",
     ];
     ComboBox::from_label("Type").selected_text(format!("{}", names[old_type]))
       .show_ui(ui, |ui| {
@@ -69,13 +69,13 @@ impl super::Mode for Analyze {
       })
     ;
     let focused_states = match self.viewing_type {
-      0 => &combine(
+      0 => state_space.get_list(Classification::Valid),
+      1 => state_space.get_list(Classification::InvalidT1),
+      2 => state_space.get_list(Classification::InvalidOther),
+      3 => &combine(
         state_space.get_list(Classification::InvalidOther), 
         state_space.get_list(Classification::InvalidT1)
       ),
-      1 => state_space.get_list(Classification::InvalidT1),
-      2 => state_space.get_list(Classification::InvalidOther),
-      3 => state_space.get_list(Classification::Valid),
       _ => unreachable!()
     };
 
@@ -97,7 +97,7 @@ impl super::Mode for Analyze {
     }
 
     // Load current viewing state
-    if let Some(state) = focused_states.get(self.viewing.saturating_sub(1)) {
+    if let Some(state) = focused_states.get(self.viewing - 1) {
       program.desired_state = *state;
     }
 

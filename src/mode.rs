@@ -16,6 +16,7 @@ trait Mode where Self: Sized {
   fn interactions(&mut self, _program: &mut GraphProgram, _response: Response) {}
 
 }
+#[derive(Debug)]
 pub enum Modes {
   Blueprint(blueprint::Blueprint),
   Play(play::Play),

@@ -1,5 +1,6 @@
 use super::common::*;
 
+#[derive(Debug)]
 pub struct Play { 
   reversible_only: bool,
 }
