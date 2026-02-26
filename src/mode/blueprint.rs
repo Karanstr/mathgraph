@@ -220,7 +220,7 @@ impl GraphType {
       Self::Path(n) => {
         let node_size = NODE_RADIUS * 3.;
         let step = Vec2::new(node_size, 0.);
-        let start= space.center() - Vec2::new((node_size * n as f32 - 1.) / 2., 0.);
+        let start = space.center() - Vec2::new((node_size * n as f32 - 1.) / 2., 0.);
         let mut cur_pos = start;
 
         graph.add_node(cur_pos);
@@ -234,12 +234,14 @@ impl GraphType {
           graph.unchecked_directed_connection(i, i - 1);
           cur_pos += step;
         }
+
         graph.add_node(cur_pos);
-        graph.unchecked_directed_connection(n - 1, 0);
+        graph.unchecked_directed_connection(n - 1, n - 2);
       }
       Self::Cycle(n) => {
         let big_radius = NODE_RADIUS * n as f32;
         let points = points_on_circle(n, space.center(), big_radius);
+        // for (i, &point) in points.iter().enumerate() {
         for point in points {
           graph.add_node(point);
         }

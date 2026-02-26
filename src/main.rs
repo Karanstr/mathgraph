@@ -106,7 +106,6 @@ impl GraphProgram {
 
     // We have to construct the mode after updating state_space
     self.mode = Modes::new(&self, new_mode);
-    dbg!(&self.mode);
 
   }
 
